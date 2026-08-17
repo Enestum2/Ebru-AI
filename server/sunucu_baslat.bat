@@ -171,19 +171,20 @@ echo  (tailnet icinden calisir, mobil sebekede DNS cozemiyor)
 echo.
 echo  Telefonlar icin ek Cloudflare tuneli baslatiliyor...
 
-set "CF2="
-where cloudflared >nul 2>&1 && set "CF2=cloudflared"
-if not defined CF2 if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CF2=%ProgramFiles(x86)%\cloudflared\cloudflared.exe"
-if not defined CF2 if exist "%ProgramFiles%\cloudflared\cloudflared.exe" set "CF2=%ProgramFiles%\cloudflared\cloudflared.exe"
-
-if not defined CF2 (
-    echo UYARI: cloudflared bulunamadi. Telefonlar baglanamaz.
-    echo Kurulum: winget install --id Cloudflare.cloudflared
+REM Tunel komutu ayri bir dosyada (tunel_baslat.bat). Buraya dogrudan
+REM yazildiginda ic ice tirnak ve ">" kacislari bozulup "--url"
+REM bayragi kayboluyor; o zaman cloudflared komutu adlandirilmis
+REM tunel sanip cert.pem istiyor ve "Error locating origin cert"
+REM hatasi veriyor. Ayri dosyada kacis gerekmiyor.
+if not exist "%BACKEND_DIR%\tunel_baslat.bat" (
+    echo UYARI: tunel_baslat.bat bulunamadi. Telefonlar baglanamaz.
     goto son
 )
 
+REM Tam yolla cagiriliyor: adiyla cagirmak
+REM NoDefaultCurrentDirectoryInExePath set oldugunda calismiyor.
 if exist "%BACKEND_DIR%\tunel.log" del "%BACKEND_DIR%\tunel.log"
-start "Ebru - Tunel" cmd /k ""%CF2%" tunnel --url http://localhost:5000 ^> "%BACKEND_DIR%\tunel.log" 2^>^&1"
+start "Ebru - Tunel" "%BACKEND_DIR%\tunel_baslat.bat"
 
 :adres
 echo.
