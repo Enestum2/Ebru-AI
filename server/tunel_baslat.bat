@@ -2,41 +2,39 @@
 title Ebru - Tunel
 
 REM ============================================================
-REM  Cloudflare hizli tuneli. sunucu_baslat.bat bunu ayri bir
-REM  pencerede cagiriyor. Adres tunel.log dosyasina yazilir.
+REM  Ebru AI tuneli. sunucu_baslat.bat bunu ayri pencerede cagirir.
 REM
-REM  Bu dosya bilerek cok sade tutuldu. Denemelerde sunlar sorun
-REM  cikardi ve hepsi burada asiliyor:
+REM  KALICI TUNEL kullaniliyor: adres her zaman ebruai.com.
+REM  Baglanti kopsa da cloudflared yeniden baglandiginda ayni
+REM  adrese donuyor, sunucu.json'u guncellemek gerekmiyor.
+REM  Yapilandirma: %USERPROFILE%\.cloudflared\config.yml
 REM
-REM  1) Komut dogrudan "start ... cmd /k "..."" icine yazildiginda
-REM     ic ice tirnaklar bozuluyor, "--url" bayragi kayboluyor ve
-REM     cloudflared komutu adlandirilmis tunel sanip cert.pem
-REM     istiyor ("Error locating origin cert").
-REM  2) Klasor adindaki Turkce harf CMD kod sayfasinda dusuyor
+REM  Bu dosya sade tutuldu. Denemelerde su tuzaklar cikti, hepsi
+REM  burada asiliyor:
+REM
+REM  1) cloudflared, TUNNEL_ onekli ORTAM DEGISKENLERINI komut
+REM     satiri bayragi gibi okuyor. sunucu_baslat.bat eskiden
+REM     "TUNNEL_NAME=ebru" ayarliyordu; o yuzden hizli tunel bile
+REM     adlandirilmis tunel sanilip cert.pem isteniyor ve
+REM     "Error locating origin cert" hatasi aliniyordu. Asil sebep
+REM     buydu; degisken adi CF_TUNEL_ADI'ya cevrildi, burada da
+REM     temizlik yapiliyor.
+REM  2) Komut "start ... cmd /k "..."" icine gomuldugunde ic ice
+REM     tirnaklar bozuluyor ve bayraklar kayboluyor. O yuzden
+REM     komut ayri dosyada.
+REM  3) Klasor adindaki Turkce harf CMD kod sayfasinda dusuyor
 REM     ("proje kodlari" -> "proje kodlar"), o yuzden yonlendirmede
-REM     mutlak yol KULLANILMIYOR; once cd yapip ciplak dosya adi
-REM     yaziliyor.
-REM  3) NoDefaultCurrentDirectoryInExePath set oldugunda cmd bu
+REM     mutlak yol kullanilmiyor: once cd, sonra ciplak dosya adi.
+REM  4) NoDefaultCurrentDirectoryInExePath set oldugunda cmd bu
 REM     klasordeki dosyalari adiyla calistiramiyor.
-REM  4) "localhost" Windows'ta IPv6'ya (::1) cozulebiliyor, Flask
-REM     ise yalnizca IPv4 dinliyor; tunel 502 donuyor. Bu yuzden
-REM     127.0.0.1 yaziliyor.
+REM  5) Origin adresi 127.0.0.1, "localhost" DEGIL: Windows'ta
+REM     localhost IPv6'ya (::1) cozulebiliyor, Flask yalnizca IPv4
+REM     dinledigi icin tunel 502 donuyor. (config.yml icinde.)
 REM ============================================================
 
 set "NoDefaultCurrentDirectoryInExePath="
 cd /d "%~dp0"
 
-REM ============================================================
-REM  ASIL TUZAK BURASI: cloudflared, TUNNEL_ onekli ortam
-REM  degiskenlerini komut satiri bayragi gibi okuyor.
-REM  sunucu_baslat.bat "TUNNEL_NAME=ebru" ayarliyor (kalici
-REM  Cloudflare tuneli secenegi icin). O degisken ortamda oldugunda
-REM  cloudflared "--name ebru" verilmis sayiyor, adlandirilmis tunel
-REM  moduna geciyor ve cert.pem istiyor:
-REM    "Error locating origin cert" / "failed to create tunnel"
-REM  --url versek bile oluyor. Bu yuzden hizli tunel calistirmadan
-REM  once TUNNEL_ degiskenlerini temizliyoruz.
-REM ============================================================
 set "TUNNEL_NAME="
 set "TUNNEL_ORIGIN_CERT="
 set "TUNNEL_OUTPUT="
@@ -44,19 +42,29 @@ set "TUNNEL_ID="
 set "TUNNEL_CONFIG="
 set "TUNNEL_CRED_FILE="
 
-echo Cloudflare tuneli baslatiliyor...
-echo Adres bu klasordeki tunel.log dosyasina yazilacak.
-echo.
+REM Kalici tunel icin gerekli iki dosya var mi?
+if not exist "%USERPROFILE%\.cloudflared\config.yml" goto hizli
+if not exist "%USERPROFILE%\.cloudflared\cert.pem"   goto hizli
 
+echo Kalici tunel baslatiliyor: https://ebruai.com
+echo Gunluk: bu klasordeki tunel.log
+echo.
+cloudflared tunnel run ebru > tunel.log 2>&1
+goto kapandi
+
+REM ------------------------------------------------------------
+REM Kalici tunel yapilandirmasi yoksa gecici adresle devam et.
+REM O durumda adres her acilista degisir ve depodaki sunucu.json
+REM elle guncellenmelidir.
+REM ------------------------------------------------------------
+:hizli
+echo UYARI: kalici tunel yapilandirmasi bulunamadi.
+echo Gecici (trycloudflare) adres kullanilacak; adres her acilista
+echo degisir ve sunucu.json elle guncellenmelidir.
+echo.
 cloudflared tunnel --url http://127.0.0.1:5000 > tunel.log 2>&1
 
-REM cloudflared PATH'te yoksa yukaridaki satir hata verir; tam yolla
-REM tekrar deniyoruz.
-if errorlevel 9009 (
-    echo cloudflared PATH'te yok, tam yol deneniyor...
-    "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" tunnel --url http://127.0.0.1:5000 > tunel.log 2>&1
-)
-
+:kapandi
 echo.
 echo Tunel kapandi. Sebebi icin tunel.log dosyasina bak.
 pause
