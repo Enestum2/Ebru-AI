@@ -26,6 +26,24 @@ REM ============================================================
 set "NoDefaultCurrentDirectoryInExePath="
 cd /d "%~dp0"
 
+REM ============================================================
+REM  ASIL TUZAK BURASI: cloudflared, TUNNEL_ onekli ortam
+REM  degiskenlerini komut satiri bayragi gibi okuyor.
+REM  sunucu_baslat.bat "TUNNEL_NAME=ebru" ayarliyor (kalici
+REM  Cloudflare tuneli secenegi icin). O degisken ortamda oldugunda
+REM  cloudflared "--name ebru" verilmis sayiyor, adlandirilmis tunel
+REM  moduna geciyor ve cert.pem istiyor:
+REM    "Error locating origin cert" / "failed to create tunnel"
+REM  --url versek bile oluyor. Bu yuzden hizli tunel calistirmadan
+REM  once TUNNEL_ degiskenlerini temizliyoruz.
+REM ============================================================
+set "TUNNEL_NAME="
+set "TUNNEL_ORIGIN_CERT="
+set "TUNNEL_OUTPUT="
+set "TUNNEL_ID="
+set "TUNNEL_CONFIG="
+set "TUNNEL_CRED_FILE="
+
 echo Cloudflare tuneli baslatiliyor...
 echo Adres bu klasordeki tunel.log dosyasina yazilacak.
 echo.

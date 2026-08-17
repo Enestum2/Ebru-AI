@@ -35,7 +35,14 @@ REM   yok        -> tunel yok, yalnizca ayni Wi-Fi
 set "TUNEL=tailscale"
 
 REM TUNEL=sabit icin: "cloudflared tunnel create" ile olusturdugun ad
-set "TUNNEL_NAME=ebru"
+REM
+REM DIKKAT: bu degiskenin adi TUNNEL_ ile BASLAMAMALI. cloudflared,
+REM TUNNEL_ onekli ortam degiskenlerini komut satiri bayragi gibi
+REM okuyor; "TUNNEL_NAME=ebru" ayarliyken hizli tunel (--url) bile
+REM adlandirilmis tunel sanilip cert.pem isteniyor ve
+REM "Error locating origin cert" hatasi aliniyor. Eskiden adi
+REM TUNNEL_NAME'di ve tam bu soruna yol aciyordu.
+set "CF_TUNEL_ADI=ebru"
 
 REM TUNEL=ngrok icin sabit adres (ornek: ebru.ngrok-free.app)
 set "NGROK_DOMAIN="
@@ -145,8 +152,8 @@ REM bayraginin kaybolmasina ve "origin cert" hatasina yol aciyordu.
 REM Bu yuzden dogrudan calistirilip cikti dosyaya yonlendiriliyor.
 
 if /i "%TUNEL%"=="sabit" (
-    echo [3/3] Kalici Cloudflare tuneli baslatiliyor: %TUNNEL_NAME%
-    start "Ebru - Tunel" cmd /k ""%CF%" tunnel run --url http://localhost:5000 %TUNNEL_NAME% ^> "%BACKEND_DIR%\tunel.log" 2^>^&1"
+    echo [3/3] Kalici Cloudflare tuneli baslatiliyor: %CF_TUNEL_ADI%
+    start "Ebru - Tunel" cmd /k ""%CF%" tunnel run --url http://127.0.0.1:5000 %CF_TUNEL_ADI% ^> "%BACKEND_DIR%\tunel.log" 2^>^&1"
     goto adres
 )
 
