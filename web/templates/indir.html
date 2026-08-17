@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebru AI - Mobil Uygulama</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='hesap.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999-?">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+</head>
+<body>
+
+<header id="mainHeader">
+    <div class="logo">Ebru<span>.AI</span></div>
+   <nav>
+    <ul>
+        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
+        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
+        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
+        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
+    </ul>
+</nav>
+</header>
+
+<main class="indir-sayfa">
+    <div class="indir-ust">
+        <h1>Ebru AI <span class="gradient-text">Android</span></h1>
+        <p>
+            Ürettiğin eserleri doğrudan duvar kağıdı yap, galerinde sakla,
+            paylaş. Telefonuna kur, hesabınla giriş yap.
+        </p>
+    </div>
+
+    <div class="indir-kutu">
+        {% if apk_var %}
+            <a href="{{ url_for('apk_indir') }}" class="primary-btn">
+                <i class="fa-solid fa-download"></i>&nbsp; Uygulamayı İndir
+            </a>
+            <div class="boyut">
+                APK · {{ apk_boyut }} MB · Android 8.0 ve üzeri
+            </div>
+        {% else %}
+            <p style="color: var(--text-muted); margin: 0;">
+                Uygulama dosyası henüz yüklenmedi.
+            </p>
+        {% endif %}
+    </div>
+
+    <div class="ozellikler">
+        <div class="ozellik">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <h3>Örnekli seçim</h3>
+            <p>
+                Her renk paleti ve desen için gerçek örnekler görürsün.
+                Ne çıkacağını tahmin etmen gerekmez.
+            </p>
+        </div>
+        <div class="ozellik">
+            <i class="fa-solid fa-mobile-screen"></i>
+            <h3>Duvar kağıdı yap</h3>
+            <p>
+                Eseri tek dokunuşla kilit ekranına, ana ekrana ya da
+                ikisine birden uygula.
+            </p>
+        </div>
+        <div class="ozellik">
+            <i class="fa-solid fa-sliders"></i>
+            <h3>Desen yoğunluğu</h3>
+            <p>
+                Ebru dokusunun ne kadar baskın olacağını sen ayarla.
+                Nesne istediğinde de kaybolmaz.
+            </p>
+        </div>
+        <div class="ozellik">
+            <i class="fa-solid fa-images"></i>
+            <h3>Kişisel galeri</h3>
+            <p>
+                Ürettiğin her eser telefonunda saklanır. Favorile,
+                paylaş, benzerini üret.
+            </p>
+        </div>
+    </div>
+
+    <div class="kurulum-notu">
+        <strong>Kurulum:</strong> Android, bilinmeyen kaynaklardan gelen
+        uygulamalar için izin ister. İndirdikten sonra dosyayı açtığında
+        çıkan uyarıda <strong>“Bu kaynağa izin ver”</strong> demen yeterli.
+        Uygulama Play Store üzerinden dağıtılmadığı için bu adım normaldir.
+        <br><br>
+        Görsel üretimi kendi sunucumuzdaki ekran kartında yapılıyor.
+        Sunucu kapalıyken uygulama bunu açıkça belirtir.
+    </div>
+</main>
+
+<script src="{{ url_for('static', filename='hesap.js') }}"></script>
+</body>
+</html>

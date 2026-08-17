@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebru AI - Giriş</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='hesap.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999-?">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<header id="mainHeader">
+    <div class="logo">Ebru<span>.AI</span></div>
+    <nav>
+    <ul>
+        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
+        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
+        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
+        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
+    </ul>
+</nav>
+</header>
+
+<main class="hesap-sayfa">
+    <div class="hesap-kutu">
+        <h1 id="baslik">Giriş Yap</h1>
+        <p class="hesap-alt" id="altBaslik">
+            Eser üretmek için hesabına giriş yap.
+        </p>
+
+        <form id="hesapForm" autocomplete="on">
+            <label for="kullaniciAdi">Kullanıcı adı</label>
+            <input type="text" id="kullaniciAdi" name="username"
+                   autocomplete="username" required>
+
+            <label for="sifre">Şifre</label>
+            <input type="password" id="sifre" name="password"
+                   autocomplete="current-password" required>
+
+            <p class="hesap-ipucu" id="kayitIpucu" hidden>
+                Kullanıcı adı 3-24 karakter, şifre en az 6 karakter olmalı.
+            </p>
+
+            <div id="hataKutusu" class="hesap-hata" hidden></div>
+
+            <button type="submit" class="primary-btn" id="gonderBtn">
+                Giriş Yap
+            </button>
+        </form>
+
+        <p class="hesap-gecis">
+            <span id="gecisMetin">Hesabın yok mu?</span>
+            <a href="#" id="gecisBtn">Kayıt ol</a>
+        </p>
+    </div>
+</main>
+<script src="{{ url_for('static', filename='hesap.js') }}"></script>
+</body>
+</html>

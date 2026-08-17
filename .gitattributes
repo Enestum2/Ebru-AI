@@ -1,0 +1,7 @@
+# Kabuk betikleri Linux'ta çalışıyor. Windows'ta düzenlenip CRLF ile
+# kaydedilirse pod'da "bad interpreter" hatası verip hiç çalışmazlar,
+# üstelik hata mesajı sebebi göstermez. Bu yüzden satır sonu sabitleniyor.
+*.sh text eol=lf
+
+# Aynı gerekçe: uygulama bu dosyayı ayrıştırıyor.
+*.json text eol=lf

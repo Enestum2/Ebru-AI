@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebru AI - Ana Sayfa</title>
+    
+    <!-- CSS BAĞLANTILARI BURADA (SİLİNMEMESİ GEREKEN KISIM) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='hesap.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="home-page-body">
+
+    <!-- MENÜ KISMI (HAKKIMIZDA SİLİNMİŞ, TEMİZ HALİ) -->
+    <header id="mainHeader">
+        <div class="logo">Ebru<span>.AI</span></div>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('home') }}" class="active">Anasayfa</a></li>
+                <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
+                <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
+                <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <div class="hero-text">
+            <div class="hero-badge">✨ SDXL Teknolojisi ile Güçlendirildi</div>
+            <h1>
+                Geleneksel Sanat,<br>
+                <span class="gradient-text">Yapay Zeka</span><br>
+                ile Buluşuyor
+            </h1>
+            <p>Suyun üzerindeki dansı dijital dünyaya taşıdık. Hayalinizdeki Ebru eserini saniyeler içinde oluşturun.</p>
+            <button class="primary-btn" onclick="document.getElementById('generator').scrollIntoView({behavior: 'smooth'})">Hemen Üretmeye Başla</button>
+        </div>
+
+        <div class="hero-image">
+            <!-- ======================================================== -->
+            <!-- 4. SORUN ÇÖZÜMÜ: SİYAH SAYFAYLA SİLİNEN YENİ YAPI -->
+            <!-- ======================================================== -->
+            <div class="hero-image-container">
+                <!-- 1. En Alttaki Resim (Hover yapılınca görünecek) -->
+                <img class="img-back" src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt="Osmanlı paletinde üretilmiş gül">
+                
+                <!-- 2. Geçişi sağlayan Siyah Sayfa -->
+                <div class="black-page"></div>
+
+                <!-- 3. En Üstteki Resim (Site açılınca ilk görünen) -->
+                <img class="img-front" src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt="Kırmızı ve krem tonlarında saf ebru">
+
+                <!-- 4. Sürekli hareket eden sinematik gölge efekti -->
+                <div class="moving-shadow-layer"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="generator-container" id="generator">
+        <div class="controls">
+            <h2>Eserini Tasarla</h2>
+            <p>Aklınızdaki sahneyi Türkçe olarak detaylıca tarif edin.</p>
+            
+            <textarea id="promptInput" placeholder="Örn: Galata kulesi etrafında uçuşan martılar, lale motifleri..."></textarea>
+            
+            <div class="settings-info">
+                <small><i class="fas fa-robot"></i> Model: SDXL Ebru v1 &nbsp;&nbsp;|&nbsp;&nbsp; <i class="fas fa-expand"></i> 1024x1024</small>
+            </div>
+
+            <button id="generateBtn" onclick="resimUret()">ESERİ OLUŞTUR</button>
+        </div>
+
+        <div class="preview-area">
+            <div id="placeholderBox" style="text-align: center; color: #555;">
+                <i class="fas fa-palette" style="font-size: 3rem; margin-bottom: 10px;"></i>
+                <div style="font-weight: 600;">Eseriniz Burada Görüntülenecek</div>
+            </div>
+
+            <div id="loadingSpinner" class="hidden" style="text-align: center;">
+                <div class="spinner"></div>
+                <p style="color: #888; margin-top: 15px;">Sanatçı fırçalarını hazırlıyor...</p>
+            </div>
+
+            <img id="resultImage" class="hidden" src="" alt="Yapay Zeka Ebru">
+            
+            <button id="downloadBtn" class="hidden"><i class="fas fa-download"></i> İndir</button>
+        </div>
+    </section>
+
+    <!-- ÖZEL UYARI MODALI -->
+    <div id="customWarningModal" class="custom-modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <h3 class="gradient-text" style="animation: textFlow 3s linear infinite;">Üretim Devam Ediyor!</h3>
+            <p>Eseriniz şu an yapay zeka tarafından çiziliyor. Sayfadan ayrılırsanız işlem iptal olacaktır. Çıkmak istediğinize emin misiniz?</p>
+            <div class="modal-buttons">
+                <button id="modalStayBtn" class="modal-btn-stay">Hayır, Bekle</button>
+                <button id="modalLeaveBtn" class="modal-btn-leave">Evet, Çık</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        
+    </footer>
+
+    <script src="{{ url_for('static', filename='hesap.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

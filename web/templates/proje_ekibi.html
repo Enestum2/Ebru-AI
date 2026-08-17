@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebru AI - Proje Ekibi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=20260814-2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- YENİ HEADER (Giriş Yap Butonu Yok) -->
+    <header id="mainHeader">
+        <div class="logo">Ebru<span>.AI</span></div>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
+                <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
+                <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
+                <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
+                <li><a href="{{ url_for('proje_ekibi') }}" class="active">Hakkımızda</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="content-section">
+        <h2 class="page-title">Proje <span class="gradient-text">Ekibi</span></h2>
+        <p class="page-subtitle">Bu şaheseri hayata geçiren çekirdek kadro.</p>
+        
+        <div class="grid-container">
+            
+            <!-- 1. GELİŞTİRİCİ (SEN) -->
+            <div class="card">
+                <div class="team-avatar">
+                    <i class="fas fa-laptop-code"></i>
+                </div>
+                <h3>Senin Adın</h3>
+                <p>AI & Backend Developer</p>
+                <div class="social-links">
+                    <a href="https://github.com/SENIN_GITHUB_ADIN" target="_blank"><i class="fab fa-github"></i></a>
+                    <a href="https://linkedin.com/in/SENIN_LINKEDIN_ADIN" target="_blank"><i class="fab fa-linkedin"></i></a>
+                </div>
+            </div>
+
+            <!-- 2. GELİŞTİRİCİ (TAKIM ARKADAŞIN) -->
+            <div class="card">
+                <div class="team-avatar">
+                    <i class="fas fa-code-branch"></i>
+                </div>
+                <h3>Arkadaşının Adı</h3>
+                <p>Frontend & Veri Seti Uzmanı</p>
+                <div class="social-links">
+                    <a href="#" target="_blank"><i class="fab fa-github"></i></a>
+                    <a href="#" target="_blank"><i class="fab fa-linkedin"></i></a>
+                </div>
+            </div>
+
+            <!-- 3. DANIŞMAN HOCA -->
+            <div class="card">
+                <div class="team-avatar">
+                    <i class="fas fa-user-tie"></i>
+                </div>
+                <h3>Danışman Hocanızın Adı</h3>
+                <p>Akademik Danışman</p>
+                <div class="social-links">
+                    
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Ebru AI - TÜBİTAK Projesi - Tüm Hakları Saklıdır.</p>
+    </footer>
+
+</body>
+</html>

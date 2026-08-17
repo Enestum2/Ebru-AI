@@ -1,0 +1,2505 @@
+import os
+import re
+import sys
+import time
+import random
+import secrets
+import subprocess
+import threading
+from collections import deque
+from contextlib import contextmanager
+
+from deep_translator import GoogleTranslator
+
+# Windows konsolu varsayılan olarak cp1254 kullanıyor ve log'lardaki
+# emojilerde UnicodeEncodeError fırlatıp isteği çökertebiliyor.
+for _akis in (sys.stdout, sys.stderr):
+    try:
+        _akis.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+# =====================================
+# GEREKLİ PAKETLER
+# =====================================
+
+def ensure_package(package_name, import_name=None):
+    """
+    Paket kurulu değilse otomatik kurar.
+    """
+    import_name = import_name or package_name
+
+    try:
+        __import__(import_name)
+
+    except ImportError:
+        print(f"📦 {package_name} kuruluyor...")
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                package_name
+            ]
+        )
+
+
+ensure_package("flask")
+ensure_package("flask-cors", "flask_cors")
+ensure_package("requests")
+ensure_package("deep-translator", "deep_translator")
+
+# =====================================
+# IMPORTLAR
+# =====================================
+
+from flask import (
+    Flask,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+)
+from flask_cors import CORS
+import requests
+
+import kullanicilar
+# =====================================
+# FLASK AYARLARI
+# =====================================
+
+# Web dosyaları (html/css/js) sunucu kodundan ayrı bir klasörde
+# duruyor ki backend ile karışmasınlar.
+#
+# Koda makineye özel bir yol yazılmıyor: önce EBRU_WEB_DIR, sonra bilinen
+# yerleşimler kendi konumumuza göre denenir. Böylece hem depo düzeninde
+# (../web) hem geliştirme makinesindeki ayrı klasörde çalışıyor ve sunucu
+# bir konteynere taşındığında da bozulmuyor.
+def _web_klasoru_bul():
+    elle = os.environ.get("EBRU_WEB_DIR")
+    if elle:
+        return elle
+
+    burasi = os.path.dirname(os.path.abspath(__file__))
+    adaylar = (
+        os.path.join(burasi, "..", "web"),              # depo düzeni
+        os.path.join(burasi, "..", "..", "..", "Ebru_Web"),  # ayrı klasör
+    )
+
+    for aday in adaylar:
+        if os.path.isdir(os.path.join(aday, "templates")):
+            return os.path.normpath(aday)
+
+    # Hiçbiri yoksa ilk adayı döndür; başlangıçta uyarı basılıyor.
+    return os.path.normpath(adaylar[0])
+
+
+WEB_KLASORU = _web_klasoru_bul()
+
+if not os.path.isdir(os.path.join(WEB_KLASORU, "templates")):
+    print(f"⚠️  Web klasörü bulunamadı: {WEB_KLASORU}")
+    print("   Site sayfaları açılmayacak. EBRU_WEB_DIR ile konumu ver.")
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(WEB_KLASORU, "templates"),
+    static_folder=os.path.join(WEB_KLASORU, "static"),
+)
+
+CORS(app)
+# =====================================
+# STABLE DIFFUSION BAĞLANTI AYARLARI
+# =====================================
+# Eski tasarımda Colab tünel adresi her istekte Google Drive'daki bir
+# dosyadan okunuyordu. Bu hem istek başına ~15 sn gecikme ekliyor hem de
+# Drive'ın indirme onay sayfası yüzünden sessizce bozulabiliyordu.
+#
+# Yeni tasarım: Colab notebook'u açılışta kendi tünel adresini
+# POST /register-backend ile buraya bildirir. Adres bellekte tutulur,
+# arka planda çalışan bir sağlık kontrolü ayakta olup olmadığını izler.
+
+LOCAL_FALLBACK_URL = (
+    os.environ.get("EBRU_LOCAL_SD_URL")
+    or os.environ.get("SD_LOCAL_URL")
+    or "http://127.0.0.1:7860"
+)
+
+# Colab'ın kendini kaydederken göndereceği gizli anahtar.
+# Ortam değişkeni yoksa her açılışta rastgele üretilir ve konsola yazılır.
+REGISTER_TOKEN = os.environ.get("EBRU_REGISTER_TOKEN")
+_TOKEN_AUTO_GENERATED = REGISTER_TOKEN is None
+if _TOKEN_AUTO_GENERATED:
+    REGISTER_TOKEN = secrets.token_urlsafe(16)
+
+# Yalnızca bilinen tünel sağlayıcıları kabul edilir.
+ALLOWED_TUNNEL_HOSTS = (
+    "gradio.live",
+    "trycloudflare.com",
+    "ngrok-free.app",
+    "ngrok.io",
+    "loca.lt",
+)
+
+HEALTH_INTERVAL = 30      # saniye: arka plan sağlık kontrolü sıklığı
+HEALTH_TIMEOUT = 6        # saniye: tek bir ping için üst sınır
+GENERATE_TIMEOUT = int(
+    os.environ.get("EBRU_GENERATE_TIMEOUT", "300")
+)                         # saniye: görsel üretimi için üst sınır
+
+# Bağlantıların yeniden kullanılması için oturumlar.
+# Üretim ve yoklama ayrı oturumlarda: uzun süren üretim isteği
+# havuzu meşgul ettiğinde ilerleme sorguları boş dönüyordu.
+http = requests.Session()
+probe_http = requests.Session()
+
+# İlerleme bilgisi kısa süre önbelleklenir. Her sorgu A1111'e
+# gitmiyor; VRAM'i zorlanan sunucuda bu fark yaratıyor.
+PROGRESS_CACHE_TTL = 2.0
+_progress_cache = {"veri": None, "zaman": 0.0}
+_progress_lock = threading.Lock()
+
+
+def get_progress_cached(active_url):
+    """A1111'in ilerleme bilgisini en fazla saniyede bir kez sorar."""
+    simdi = time.time()
+    with _progress_lock:
+        if (
+            _progress_cache["veri"] is not None
+            and simdi - _progress_cache["zaman"] < PROGRESS_CACHE_TTL
+        ):
+            return _progress_cache["veri"]
+
+    try:
+        veri = probe_http.get(
+            f"{active_url}/sdapi/v1/progress",
+            timeout=HEALTH_TIMEOUT,
+        ).json()
+    except Exception:
+        veri = {}
+
+    with _progress_lock:
+        _progress_cache["veri"] = veri
+        _progress_cache["zaman"] = simdi
+    return veri
+
+# Aktif backend durumu (arka plan thread'i ve istekler ortak kullanır).
+_state_lock = threading.Lock()
+_state = {
+    "remote_url": None,     # Colab'ın kaydettiği tünel adresi
+    "remote_ok": False,
+    "local_ok": False,
+    "registered_at": None,
+    "last_check": None,
+}
+
+
+def probe(url):
+    """Bir A1111 sunucusunun ayakta olup olmadığını hızlıca kontrol eder."""
+    try:
+        response = probe_http.get(
+            f"{url}/sdapi/v1/progress",
+            timeout=HEALTH_TIMEOUT,
+        )
+        # Tünel düşmüşse sağlayıcı HTML hata sayfası döndürür.
+        content_type = response.headers.get("Content-Type", "")
+        return response.status_code == 200 and "json" in content_type
+    except Exception:
+        return False
+
+
+def refresh_health():
+    """Kayıtlı uzak sunucuyu ve yerel GPU'yu kontrol edip durumu günceller."""
+    with _state_lock:
+        remote_url = _state["remote_url"]
+
+    remote_ok = probe(remote_url) if remote_url else False
+    local_ok = probe(LOCAL_FALLBACK_URL)
+
+    with _state_lock:
+        _state["remote_ok"] = remote_ok
+        _state["local_ok"] = local_ok
+        _state["last_check"] = time.time()
+
+
+def health_loop():
+    """Arka planda sürekli çalışan sağlık kontrolü."""
+    while True:
+        try:
+            refresh_health()
+        except Exception as e:
+            print("⚠️ Sağlık kontrolü hatası:", e)
+        time.sleep(HEALTH_INTERVAL)
+
+
+def get_active_url():
+    """
+    Kullanılacak sunucuyu döner: önce Colab, o yoksa yerel GPU.
+    Deneme-yanılma yapılmaz; durum arka planda zaten biliniyor.
+    """
+    with _state_lock:
+        if _state["remote_ok"] and _state["remote_url"]:
+            return _state["remote_url"], "colab"
+        if _state["local_ok"]:
+            return LOCAL_FALLBACK_URL, "local"
+    return None, None
+
+
+# =====================================
+# KUYRUK VE KULLANIM SINIRLARI
+# =====================================
+# Uygulamayı indiren herkes aynı tek GPU'yu kullanacak. Eşzamanlı
+# istekler GPU'yu belleksiz bırakıp tüm üretimleri düşürebildiği için
+# aynı anda yalnızca bir üretim çalışır, kalanlar sıraya girer.
+
+# A1111'in API'si ürettiği görseli varsayılan olarak diske yazmıyor,
+# yalnızca yanıtta döndürüyor. Telefondaki kopya ise uygulamaya özel
+# klasörde duruyor ve uygulama kaldırılınca siliniyor — bir güncelleme
+# yüzünden bütün eserler böyle kaybolmuştu ve geri dönüş yeri yoktu.
+# Açıkken her üretimin bir kopyası sunucuda kalıyor
+# (stable-diffusion-webui/outputs/txt2img-images).
+#
+# A1111 üretim parametrelerini PNG üstverisine de gömüyor, yani seed
+# dâhil her şey sonradan okunabiliyor.
+#
+# 704x1024 bir görsel ~300-500 KB; günlük 30 üretimde aylık ~450 MB.
+# Yer sıkıntısı olursa EBRU_SAVE_IMAGES=0 ile kapatılabilir.
+SAVE_IMAGES = os.environ.get("EBRU_SAVE_IMAGES", "1") == "1"
+
+MAX_QUEUE = int(os.environ.get("EBRU_MAX_QUEUE", "8"))
+QUEUE_TIMEOUT = int(os.environ.get("EBRU_QUEUE_TIMEOUT", "240"))
+DAILY_LIMIT = int(os.environ.get("EBRU_DAILY_LIMIT", "30"))
+MIN_INTERVAL = float(os.environ.get("EBRU_MIN_INTERVAL", "3"))
+
+_gpu_semaphore = threading.BoundedSemaphore(1)
+_queue_lock = threading.Lock()
+_queue_length = 0
+
+_usage_lock = threading.Lock()
+_usage = {}
+
+
+class KuyrukDolu(Exception):
+    """Bekleyen istek sayısı üst sınıra ulaştı."""
+
+
+class KuyrukZamanAsimi(Exception):
+    """Sıra beklerken süre doldu."""
+
+
+@contextmanager
+def gpu_slot():
+    """Aynı anda tek üretim çalışmasını sağlayan sıra yönetimi."""
+    global _queue_length
+
+    with _queue_lock:
+        if _queue_length >= MAX_QUEUE:
+            raise KuyrukDolu()
+        _queue_length += 1
+        sira = _queue_length
+
+    if sira > 1:
+        print(f"⏳ Sırada bekleyen istek sayısı: {sira}")
+
+    try:
+        if not _gpu_semaphore.acquire(timeout=QUEUE_TIMEOUT):
+            raise KuyrukZamanAsimi()
+        try:
+            yield
+        finally:
+            _gpu_semaphore.release()
+    finally:
+        with _queue_lock:
+            _queue_length -= 1
+
+
+def client_ip():
+    """
+    Gerçek istemci IP'si.
+
+    Tünel arkasında çalışırken her istek Flask'a 127.0.0.1 olarak
+    geliyor; tünel gerçek adresi X-Forwarded-For başlığında iletiyor.
+    Bu olmadan bütün kullanıcılar tek istemci sayılıyordu.
+    """
+    iletilen = request.headers.get("X-Forwarded-For", "")
+    if iletilen:
+        # İlk adres asıl istemci, sonrakiler ara sunucular.
+        ilk = iletilen.split(",")[0].strip()
+        if ilk:
+            return ilk
+    return request.remote_addr or "bilinmiyor"
+
+
+def client_id():
+    """
+    İstemciyi ayırt etmek için cihaz kimliği, yoksa IP adresi.
+    Uygulama X-Device-Id başlığını gönderiyor.
+    """
+    return request.headers.get("X-Device-Id") or client_ip()
+
+
+def check_rate_limit(kimlik, kullanici=None):
+    """
+    Kullanım sınırını denetler.
+    Döner: (izin_var, mesaj, kac_saniye_sonra)
+
+    Oturum açmış kullanıcıda günlük hak veritabanından okunuyor;
+    böylece uygulamayı silip yeniden kurmak hakkı sıfırlamıyor ve
+    sunucu yeniden başlasa da sayaç korunuyor.
+    """
+    simdi = time.time()
+    bugun = time.strftime("%Y-%m-%d", time.localtime(simdi))
+
+    # Art arda basmayı engelleyen kısa aralık her durumda bellekte.
+    with _usage_lock:
+        son = _usage.get(f"son:{kimlik}", 0)
+        gecen = simdi - son
+        if gecen < MIN_INTERVAL:
+            return (
+                False,
+                "Çok sık istek gönderiyorsun, biraz bekle.",
+                int(MIN_INTERVAL - gecen) + 1,
+            )
+        _usage[f"son:{kimlik}"] = simdi
+
+    if kullanici:
+        kullanilan = kullanicilar.gunluk_sayi(kullanici["id"])
+        if kullanilan >= DAILY_LIMIT:
+            return (
+                False,
+                f"Günlük {DAILY_LIMIT} üretim hakkın doldu. "
+                "Yarın tekrar deneyebilirsin.",
+                None,
+            )
+        kullanicilar.kullanim_artir(kullanici["id"])
+        return True, None, None
+
+    with _usage_lock:
+        # Dünden kalan kayıtları ara sıra temizle.
+        if len(_usage) > 1000:
+            for anahtar in [
+                k for k, v in _usage.items() if v["gun"] != bugun
+            ]:
+                del _usage[anahtar]
+
+        kayit = _usage.get(kimlik)
+        if kayit is None or kayit["gun"] != bugun:
+            kayit = {"gun": bugun, "sayi": 0, "son": 0.0}
+            _usage[kimlik] = kayit
+
+        gecen = simdi - kayit["son"]
+        if gecen < MIN_INTERVAL:
+            return (
+                False,
+                "Çok sık istek gönderiyorsun, biraz bekle.",
+                int(MIN_INTERVAL - gecen) + 1,
+            )
+
+        if kayit["sayi"] >= DAILY_LIMIT:
+            return (
+                False,
+                f"Günlük {DAILY_LIMIT} üretim hakkın doldu. "
+                "Yarın tekrar deneyebilirsin.",
+                None,
+            )
+
+        kayit["son"] = simdi
+        kayit["sayi"] += 1
+        return True, None, None
+
+
+def refund_quota(kimlik, kullanici=None):
+    """Üretim başarısız olduysa kullanılan hakkı geri verir."""
+    if kullanici:
+        kullanicilar.kullanim_azalt(kullanici["id"])
+        return
+
+    with _usage_lock:
+        kayit = _usage.get(kimlik)
+        if isinstance(kayit, dict) and kayit["sayi"] > 0:
+            kayit["sayi"] -= 1
+
+
+# =====================================
+# İSTEK KAYIT DEFTERİ
+# =====================================
+# Kimin ne ürettiğini görebilmek için son isteklerin özeti bellekte
+# tutulur. Görsel saklanmaz, yalnızca üstveri.
+
+ISTEK_GECMISI_BOYUTU = int(os.environ.get("EBRU_LOG_SIZE", "200"))
+
+_gecmis = deque(maxlen=ISTEK_GECMISI_BOYUTU)
+_gecmis_lock = threading.Lock()
+
+_sayaclar = {"toplam": 0, "basarili": 0, "hatali": 0}
+
+
+def istek_kaydet(kimlik, ip, prompt, durum, sure, kaynak, mesaj=None):
+    """Tamamlanan bir isteği geçmişe yazar."""
+    with _gecmis_lock:
+        _gecmis.append({
+            "zaman": time.time(),
+            "kimlik": kimlik,
+            "ip": ip,
+            "prompt": (prompt or "")[:120],
+            "durum": durum,
+            "sure": round(sure, 1),
+            "kaynak": kaynak,
+            "mesaj": (mesaj or "")[:160] if mesaj else None,
+        })
+        _sayaclar["toplam"] += 1
+        if durum == "success":
+            _sayaclar["basarili"] += 1
+        else:
+            _sayaclar["hatali"] += 1
+# =====================================
+# GELİŞMİŞ PROMPT ENGINE
+# =====================================
+# Ortak ebru sanat stili
+# =====================================
+# RENK TEMASINA GÖRE LORA AĞIRLIĞI
+# =====================================
+# Farklı renk temaları LoRA ile farklı etkileşime giriyor.
+# Örneğin pastel tonlar daha yumuşak, çok renkli temalar
+# daha yoğun bir LoRA baskısı gerektirebilir.
+# LoRA ağırlığı aslında "ebru dokusu ne kadar baskın olsun" ayarı.
+# Düşük değerde model nesneyi serbestçe çizebiliyor (araba, kuş,
+# portre tanınır çıkıyor); yüksek değerde ebru dokusu her şeyin üstüne
+# biniyor ve sonuç soyut/çiçeksi oluyor.
+#
+# Uygulamadaki paletler bu eksene bilinçli dağıtıldı; her paletin ne
+# işe yaradığı seçim ekranında kullanıcıya yazılıyor. Yeni paletler
+# eklenirken buraya da eklenmeli, yoksa hepsi varsayılana düşüp
+# aralarındaki fark kaybolur.
+COLOR_LORA_WEIGHTS = {
+    # --- Nesne belirgin ---
+    "pastel": 0.33,        # araba, hayvan, portre en net çıkar
+    "lale": 0.45,          # nesne belli olur, doku hafif
+
+    # --- Dengeli ---
+    "okyanus": 0.55,       # soyut ama tanınır formlar
+    "gece": 0.62,          # atmosferik, formlar erimeye başlar
+
+    # --- Ebru baskın ---
+    "osmanli": 0.75,       # klasik ebru, çiçek motifleri
+    "osmanlı": 0.75,
+    "zumrut": 0.88,        # en yoğun ebru dokusu
+    "zümrüt": 0.88,
+
+    # --- Web sitesindeki eski temalar ---
+    "cok-renkli": 0.80,
+    "mavi-beyaz": 0.45,
+}
+
+DEFAULT_LORA_WEIGHT = 0.55
+
+
+def get_lora_weight(user_text):
+    """Kullanıcı promptunda geçen renk temasına göre uygun LoRA ağırlığını seçer."""
+    text = user_text.lower()
+    for renk_key, agirlik in COLOR_LORA_WEIGHTS.items():
+        if renk_key in text:
+            print(f"🎨 Renk temasına göre LoRA ağırlığı: {renk_key} → {agirlik}")
+            return agirlik
+    return DEFAULT_LORA_WEIGHT
+
+
+# Uygulamadaki "desen yoğunluğu" kaydırıcısının karşılığı.
+# Ölçümle belirlendi: 0.30'da doku neredeyse yok, 0.90'da ebru her
+# şeyin üstüne biniyor.
+INTENSITY_MIN_LORA = 0.30
+INTENSITY_MAX_LORA = 0.90
+
+# Nesne istendiğinde üst sınır. 0.60'a kadar nesne net kalıyor,
+# üstüne çıkınca doku nesneyi yutmaya başlıyor.
+NESNE_LORA_TAVANI = float(os.environ.get("EBRU_NESNE_LORA", "0.60"))
+
+
+def intensity_to_lora(intensity):
+    """Kaydırıcı değerini (0-100) LoRA ağırlığına çevirir."""
+    oran = max(0, min(100, int(intensity))) / 100
+    agirlik = INTENSITY_MIN_LORA + oran * (
+        INTENSITY_MAX_LORA - INTENSITY_MIN_LORA
+    )
+    return round(agirlik, 2)
+# LoRA'nın eğitim etiketleri. Veri setindeki tüm görseller bu üç
+# kelimeyle etiketlendiği için model bunları gördüğünde SDXL'in genel
+# bilgisi yerine öğrendiği ebru tarzına geçiyor.
+#
+# Ölçüm: aynı seed ile karşılaştırıldığında saf ebruda doku belirgin
+# şekilde inceliyor, nesne istendiğinde ise fark çok daha büyük —
+# tetikleyicisiz kedi dekoratif bir illüstrasyon çıkarken, tetikleyicili
+# olanın tüyleri boya akışına dönüşüyor.
+LORA_TETIKLEYICI = "ebru_style, marble texture, liquid art"
+
+BASE_STYLE = f"""
+{LORA_TETIKLEYICI},
+traditional Turkish ebru marbling art,
+authentic Ottoman paper marbling technique,
+organic flowing paint patterns,
+natural pigment movements on water,
+handcrafted marbled paper texture,
+soft color transitions,
+elegant artistic composition,
+balanced visual harmony,
+museum quality artwork
+""".replace("\n", " ").strip()
+
+# Kullanıcı somut bir nesne istediğinde yukarıdaki uzun tanım nesneyi
+# bastırıyor. O durumda ebru kimliğini koruyan kısa sürüm kullanılıyor.
+BASE_STYLE_SHORT = (
+    f"{LORA_TETIKLEYICI}, "
+    "traditional Turkish ebru marbling art, "
+    "marbled paper texture, flowing paint patterns"
+)
+
+OBJECT_PROMPTS = {
+
+    "türk bayrağı":
+    "the Turkish national flag, a white crescent moon and a white five-pointed star centered on a solid deep red rectangular flag",
+
+    "bayrak":
+    "a national flag with a crescent moon and star symbol on a solid colored background",
+
+    "aslan":
+    "a majestic lion with powerful body, detailed mane, expressive eyes, strong facial features, noble posture",
+
+    "araba":
+    "a modern luxury car with sleek metallic body, aerodynamic design, detailed headlights, wheels and windows",
+
+    "otomobil":
+    "a modern luxury car with sleek metallic body, aerodynamic design, detailed headlights, wheels and windows",
+
+
+    "ağaç":
+    "a majestic tree with thick textured trunk, detailed bark, green leafy branches and natural roots",
+
+
+    "kanarya":
+    "a small elegant yellow canary bird with soft detailed feathers, bright eyes, tiny orange beak and perched pose",
+
+
+    "kuş":
+    "a beautiful bird with detailed feathers, elegant wings, sharp beak and graceful posture",
+
+
+    # Sözlükte olmayan bir hayvan yazıldığında motor onu nesne saymıyor:
+    # desen tarifi prompt'ta 1.2 ağırlıkla kalıyor, LoRA'ya nesne tavanı
+    # uygulanmıyor ve doku konuyu tamamen örtüyor. Çeviri doğru çalışsa
+    # bile görselde çıkmıyor. Sık istenen hayvanlar bu yüzden burada.
+    "kartal":
+    "a powerful eagle with broad outstretched wings, detailed feathers, "
+    "sharp curved beak and piercing focused eyes",
+
+    "şahin":
+    "a sleek falcon with pointed wings, detailed plumage, hooked beak "
+    "and alert intense gaze",
+
+    "kuğu":
+    "an elegant white swan with long curved neck, smooth detailed "
+    "feathers and calm graceful posture",
+
+    "güvercin":
+    "a gentle dove with soft rounded body, detailed wing feathers and "
+    "calm posture",
+
+    "leylek":
+    "a tall stork with long slender legs, long straight beak, white and "
+    "black detailed plumage",
+
+    "kurt":
+    "a wolf with thick detailed fur, alert pointed ears, intense eyes "
+    "and strong upright stance",
+
+    "geyik":
+    "a noble deer with branching antlers, slender legs, soft detailed "
+    "fur and calm watchful expression",
+
+    "tilki":
+    "a fox with pointed ears, bushy tail, detailed reddish fur and "
+    "clever alert expression",
+
+    "ayı":
+    "a large bear with dense detailed fur, broad shoulders and "
+    "powerful heavy stance",
+
+    "tavşan":
+    "a rabbit with long upright ears, soft detailed fur, round bright "
+    "eyes and compact crouched pose",
+
+    "yunus":
+    "a dolphin with smooth streamlined body, curved dorsal fin and "
+    "playful arching motion",
+
+    "boğa":
+    "a powerful bull with muscular body, curved horns, broad chest and "
+    "strong grounded stance",
+
+
+    "gemi":
+    "a majestic wooden sailing ship with tall mast, detailed sails, ropes and realistic wooden hull",
+
+
+    "tekne":
+    "a small handcrafted wooden boat with curved hull, realistic wood texture and oars",
+
+
+    "kelebek":
+    "a beautiful butterfly with symmetrical patterned wings, delicate antennae and elegant body",
+
+
+    "balık":
+    "a realistic fish with detailed scales, flowing fins and elegant tail",
+
+
+    "ay":
+    "a glowing crescent moon with soft luminous light and celestial atmosphere",
+
+
+    "güneş":
+    "a radiant golden sun with detailed light rays and warm glowing appearance",
+
+
+    "yıldız":
+    "a five pointed star with soft glowing edges and elegant geometric shape",
+
+
+    "kalp":
+    "a smooth symmetrical heart shape with elegant curves and balanced proportions",
+
+
+    "ev":
+    "a traditional house with roof, windows, door, chimney and detailed walls",
+
+
+    "köpek":
+    "a loyal dog with detailed fur texture, expressive eyes, ears and natural posture",
+
+
+    "kedi":
+    "an elegant cat with detailed fur texture, whiskers, ears and graceful posture",
+
+
+    "at":
+    "a majestic horse with flowing silky mane, long tail, muscular athletic body, powerful legs, expressive eyes and noble appearance",
+
+# --- HAYVANLAR ---
+    "kaplan":
+    "a majestic tiger with detailed striped fur, powerful body, sharp eyes and fierce expression",
+
+    "ejderha":
+    "a mythical dragon with detailed scales, large wings, sharp claws and fierce expression",
+
+    "fil":
+    "a majestic elephant with detailed wrinkled skin, large ears, long trunk and tusks",
+
+    "baykuş":
+    "a wise owl with detailed feathers, large round eyes and sharp talons",
+
+    "tavus kuşu":
+    "a peacock with an elaborate colorful fan-shaped tail with detailed eye patterns",
+
+    # --- TAŞITLAR ---
+    "uçak":
+    "a modern airplane with detailed metallic fuselage, wings and engines",
+
+    "helikopter":
+    "a detailed helicopter with rotor blades, cockpit and metallic body",
+
+    "motosiklet":
+    "a detailed motorcycle with sleek metallic body, wheels and handlebars",
+
+    "bisiklet":
+    "a detailed bicycle with frame, wheels, handlebars and pedals",
+
+    "tren":
+    "a detailed train with metallic carriages, wheels and windows",
+
+    # --- SEMBOLLER / BAYRAKLAR ---
+    # NOT: "türk bayrağı" ve "bayrak" yukarıda zaten tanımlı,
+    # burada tekrar tanımlanınca sessizce üzerine yazılıyordu.
+    "ay yıldız":
+    "a white crescent moon and a white five-pointed star together, a classic Turkish symbol",
+
+    "nazar boncuğu":
+    "a traditional Turkish evil eye amulet, a circular blue glass bead with concentric blue and white rings",
+
+    "lale":
+    "a classic tulip flower with elegant curved petals",
+
+    # --- ÇİÇEKLER ---
+    # Sözlükte yalnızca genel "çiçek" ve "lale" vardı; kullanıcı "gül"
+    # ya da "lavanta" yazdığında nesne algılanmıyor, ebru dokusu
+    # kelimeyi tamamen eziyordu.
+    "gül":
+    "a rose flower with layered curved petals, detailed bloom and "
+    "green leaves",
+
+    "lavanta":
+    "lavender flowers, tall slender stems topped with small purple "
+    "blossoms",
+
+    "papatya":
+    "a daisy flower with white petals radiating around a yellow center",
+
+    "karanfil":
+    "a carnation flower with densely ruffled fringed petals",
+
+    "orkide":
+    "an orchid flower with broad symmetrical petals and delicate lip",
+
+    "sümbül":
+    "a hyacinth flower, dense cluster of small star shaped blossoms "
+    "on an upright stem",
+
+    "nergis":
+    "a narcissus flower with white petals and a trumpet shaped center",
+
+    "menekşe":
+    "a violet flower with small rounded purple petals",
+
+    "ayçiçeği":
+    "a sunflower with broad golden petals around a dark seeded center",
+
+    "zambak":
+    "a lily flower with long curved petals and prominent stamens",
+
+    # --- DOĞA / MEKAN ---
+    "dağ":
+    "a majestic mountain with detailed rocky peaks and snow-capped summit",
+
+    "deniz":
+    "a vast sea with detailed rippling waves and horizon",
+
+    "orman":
+    "a dense forest with detailed trees, foliage and natural textures",
+
+    "çiçek":
+    "an elegant flower with detailed petals and natural texture",
+
+    "yaprak":
+    "a detailed leaf with visible veins and natural organic shape",
+
+    "şimşek":
+    "a bright lightning bolt with jagged glowing energy",
+
+    "bulut":
+    "a soft fluffy cloud with detailed volumetric texture",
+
+    # --- BİNALAR ---
+    "cami":
+    "a traditional mosque with detailed minarets, domes and Islamic architectural patterns",
+
+    "kale":
+    "a majestic castle with detailed stone walls, towers and battlements",
+
+    "köprü":
+    "a detailed bridge with arches, cables and structural supports",
+    "taş ev":
+    "a rustic stone house with detailed textured stone walls, a wooden door, small windows and a sloped roof",
+
+    # --- SPOR / EŞYALAR ---
+    "top":
+    "a detailed round ball with textured surface and visible seams",
+
+    "gitar":
+    "a detailed acoustic guitar with wooden body, strings and neck",
+
+    "kitap":
+    "a detailed open book with visible pages and text",
+
+    "saat":
+    "a detailed clock with visible hands, numbers and circular face",
+
+    "anahtar":
+    "a detailed ornate key with intricate handle design",
+
+
+    
+
+}
+# ==================================
+# RENK SÖZLÜĞÜ
+# =====================================
+COLOR_PROMPTS = {
+
+
+    "kırmızı":
+    "deep red colors",
+
+
+    "sarı":
+    "golden yellow colors",
+
+
+    "mavi":
+    "deep blue colors",
+
+
+    "lacivert":
+    "dark navy blue colors",
+
+
+    "yeşil":
+    "natural green colors",
+
+
+    "mor":
+    "royal purple colors",
+
+
+    "turuncu":
+    "warm orange colors",
+
+
+    "siyah":
+    "black dark tones",
+
+
+    "beyaz":
+    "pure white tones",
+
+
+    "altın":
+    "luxury golden colors",
+
+    # --- UYGULAMADAN GELEN RENK TEMALARI ---
+    # Bu temaların daha önce renk karşılığı yoktu; yalnızca LoRA
+    # ağırlığını etkiliyor, görselin rengine hiç yansımıyorlardı.
+    "pastel":
+    "soft pastel color palette, muted powdery tones, gentle low saturation "
+    "pinks, mints and creams",
+
+    "cok-renkli":
+    "vivid multicolored palette, rich saturated rainbow of pigments "
+    "blending into one another",
+
+    "çok renkli":
+    "vivid multicolored palette, rich saturated rainbow of pigments "
+    "blending into one another",
+
+    "mavi-beyaz":
+    "classic blue and white palette, deep indigo tones swirling through "
+    "clean white",
+
+    # --- İKİLİ RENK KOMBİNASYONLARI ---
+    # Takım renkleri gibi bilinen ikili kombinasyonlar. Renkler tescilli
+    # değil; burada yalnızca renk tarif ediliyor, hiçbir arma ya da
+    # logo tarifi yok.
+    #
+    # Aşağıdaki metinler de yukarıdaki kuralın kapsamında: SADECE renk.
+    # Nesne veya doku ifadesi eklenirse kullanıcı bir nesne istediğinde
+    # onunla yarışır.
+    "sarı-kırmızı":
+    "golden yellow and deep red color palette",
+
+    "sari-kirmizi":
+    "golden yellow and deep red color palette",
+
+    "sarı-lacivert":
+    "golden yellow and dark navy blue color palette",
+
+    "sari-lacivert":
+    "golden yellow and dark navy blue color palette",
+
+    "siyah-beyaz":
+    "black and white color palette, high contrast monochrome",
+
+    "sarı-siyah":
+    "golden yellow and black color palette",
+
+    "sari-siyah":
+    "golden yellow and black color palette",
+
+    "bordo-mavi":
+    "burgundy red and deep blue color palette",
+
+    "yeşil-beyaz":
+    "green and white color palette",
+
+    "yesil-beyaz":
+    "green and white color palette",
+
+    "kırmızı-beyaz":
+    "deep red and white color palette",
+
+    "kirmizi-beyaz":
+    "deep red and white color palette",
+
+    # --- UYGULAMADAKİ RENK PALETLERİ ---
+    # Uygulamanın seçim ekranındaki paletlerle birebir aynı anahtarlar.
+    #
+    # ÖNEMLİ: Bu metinler YALNIZCA renk tarif etmeli. Önceki sürümde
+    # "tulip palette", "flower colors", "marbling veined", "swirling
+    # foam" gibi ifadeler vardı; bunlar nesne ve doku emri oldukları
+    # için kullanıcı "araba" istediğinde onunla yarışıp nesneyi
+    # siliyordu. Ölçümde lale paletinde araba yerine lale çıkıyordu.
+    "osmanli":
+    "deep crimson red, burnished gold and ivory white color palette",
+
+    "osmanlı":
+    "deep crimson red, burnished gold and ivory white color palette",
+
+    "zumrut":
+    "deep emerald green and antique gold color palette",
+
+    "zümrüt":
+    "deep emerald green and antique gold color palette",
+
+    "okyanus":
+    "deep blue, aquamarine and soft white color palette",
+
+    "gece":
+    "deep indigo, near-black, silver and faint violet color palette",
+
+    "lale":
+    "rose pink, crimson and soft blush color palette",
+
+}
+ACTION_PROMPTS = {
+
+# --- HAREKET ---
+    "yüzen":
+    "swimming gracefully through water",
+
+    "zıplayan":
+    "jumping energetically in mid-air",
+
+    "dövüşen":
+    "fighting in a dynamic dramatic pose",
+
+    "dans eden":
+    "dancing gracefully with flowing movement",
+
+    "uyuyan":
+    "sleeping peacefully in a relaxed pose",
+
+    "savaşan":
+    "battling fiercely in an intense dramatic pose",
+
+    # --- DUYGU / İFADE ---
+    "gülümseyen":
+    "smiling warmly with a gentle happy expression",
+
+    "kızgın":
+    "with an angry fierce expression",
+
+    "mutlu":
+    "with a joyful happy expression",
+
+    "üzgün":
+    "with a sad melancholic expression",
+
+    # --- KOMPOZİSYON / AÇI ---
+    "yandan":
+    "shown from a side profile view",
+
+    "yukarıdan":
+    "shown from a top-down aerial view",
+
+    "yakından":
+    "shown in a detailed close-up view",
+
+    "gece":
+    "set against a dark night sky with stars",
+
+    "gündüz":
+    "set in bright daylight with clear sky",
+    "bana bakan":
+    "looking directly at the viewer, front facing",
+
+
+    "karşıya bakan":
+    "facing forward with direct gaze",
+
+
+    "uçan":
+    "flying gracefully in motion",
+
+
+    "koşan":
+    "running dynamically",
+
+
+    "oturan":
+    "sitting calmly",
+
+    "ayakta":
+    "standing proudly"
+
+}
+# =====================================
+# EBRU DESEN STİLLERİ
+# =====================================
+# Uygulama "battal", "hatip", "taraklı" gibi geleneksel ebru desen
+# adlarını gönderiyor. Bu adların İngilizce karşılığı olmadığı için
+# çeviriye bırakıldıklarında anlamsız kelimelere dönüşüyor ve stil
+# seçimi görsele hiç yansımıyordu. Her desenin görsel karşılığı burada
+# tarif ediliyor.
+STYLE_PROMPTS = {
+
+    "battal":
+    "battal marbling pattern, freely dropped paint forming large organic "
+    "rounded blotches spread evenly across the surface, no combing, "
+    "soft irregular edges",
+
+    "hatip":
+    "hatip marbling pattern, concentric rings of paint drawn into a "
+    "symmetrical central rosette flower motif, radial petal shapes, "
+    "balanced centered composition",
+
+    "taraklı":
+    "combed marbling pattern, regular parallel rows of evenly spaced "
+    "wave crests drawn by a comb, rhythmic repeating undulations, "
+    "precise structured lines",
+
+    # NOT: "tarakli" ayrıca tanımlanmıyor; eşleştirme Türkçe karakter
+    # toleranslı olduğu için "taraklı" anahtarı ikisini de yakalıyor.
+
+    "bülbül yuvası":
+    "nightingale nest marbling pattern, tight concentric spiral swirls "
+    "coiled around multiple centers, nested circular vortices",
+
+    "gelgit":
+    "tide marbling pattern, paint drawn back and forth with a stylus "
+    "into sweeping S-shaped curves, flowing directional movement",
+
+    "şal":
+    "shawl marbling pattern, interlocking curved plumes forming a dense "
+    "ornamental paisley-like texture",
+
+    "somaki":
+    "porphyry marbling pattern, fine veined stone-like texture with "
+    "delicate branching capillary lines",
+
+    "neftli":
+    "turpentine marbling pattern, scattered pale rounded droplet spots "
+    "opening within the paint like lace",
+
+}
+
+# Prompt içinde anlam taşımayan, çeviriye gönderilmesi gereksiz kelimeler.
+FILLER_WORDS = (
+    "renklerinde",
+    "renginde",
+    "deseninde",
+    "desenli",
+    "tarzında",
+    "şeklinde",
+    "olsun",
+
+    # Tek başına çevrilince saçmalayan bağlaç ve zaman kelimeleri.
+    # Ölçüm: "gece vakti" → "vakti" artakalıp "woke up" olarak
+    # çevriliyordu; "bir" → "One" olarak prompt'a giriyordu.
+    "vakti",
+    "zamanı",
+    "bir",
+    "ile",
+    "gibi",
+    "olan",
+    "ve",
+)
+
+# Aynı serbest metin tekrar geldiğinde Google Translate'e gidilmez.
+_translation_cache = {}
+_translation_lock = threading.Lock()
+
+
+_SUPHELI_CEVIRI = (
+    "error 500",
+    "server error",
+    "that's an error",
+    "<html",
+    "that’s all we know",
+)
+
+# Google ucu ara ara 500 dönüyor ya da boş yanıt veriyor; aynı metin
+# saniyeler sonra sorunsuz çevriliyor. Kaynak dili sırayla deniyoruz:
+# "auto" İngilizce yazan kullanıcıyı da doğru işliyor, "tr" ise otomatik
+# algılamanın tökezlediği kısa metinlerde daha güvenilir.
+_CEVIRI_DENEMELERI = ("auto", "tr", "auto")
+
+
+def _ceviri_dene(text_tr):
+    """Çeviriyi birkaç kez dener. Hepsi başarısızsa None döner."""
+    for sira, kaynak in enumerate(_CEVIRI_DENEMELERI, start=1):
+        try:
+            translated = GoogleTranslator(
+                source=kaynak,
+                target="en",
+            ).translate(text_tr)
+        except Exception as e:
+            print(f"⚠️ Çeviri denemesi {sira} ({kaynak}) hata verdi: {e}")
+            time.sleep(0.5 * sira)
+            continue
+
+        if not translated or any(
+            s in translated.lower() for s in _SUPHELI_CEVIRI
+        ):
+            print(
+                f"⚠️ Çeviri denemesi {sira} ({kaynak}) şüpheli sonuç verdi:",
+                str(translated)[:80],
+            )
+            time.sleep(0.5 * sira)
+            continue
+
+        return translated
+
+    return None
+
+
+def translate_cached(text_tr):
+    """Serbest metni İngilizce'ye çevirir, sonucu bellekte saklar."""
+    with _translation_lock:
+        if text_tr in _translation_cache:
+            return _translation_cache[text_tr]
+
+    translated = _ceviri_dene(text_tr)
+
+    if translated is None:
+        # ÖNEMLİ: başarısız çeviri önbelleğe ALINMIYOR.
+        #
+        # Eskiden alınıyordu: metin bir kez çevrilemediğinde Türkçe hâli
+        # önbelleğe yazılıyor, sonraki her istek o kaydı okuduğu için bir
+        # daha hiç denenmiyordu. Kullanıcı aynı prompt'u tekrar tekrar
+        # denese de konu modele hep Türkçe gidiyor, SDXL anlamadığı için
+        # görselde hiç çıkmıyordu. Sunucu yeniden başlatılmadan da
+        # düzelmiyordu.
+        print(
+            "⚠️ Çeviri yapılamadı, bu istek için orijinal metin "
+            "kullanılıyor:",
+            text_tr[:60],
+        )
+        return text_tr
+
+    with _translation_lock:
+        _translation_cache[text_tr] = translated
+    return translated
+
+
+# =====================================
+# PROMPT OLUŞTURMA
+# =====================================
+# Türkçe karakterlerin ASCII karşılıkları. Kullanıcılar sıklıkla
+# "kus", "agac", "ucan" gibi yazıyor; bunlar da eşleşmeli.
+_HARF_GRUPLARI = {
+    "i": "iıîİ",
+    "s": "sş",
+    "g": "gğ",
+    "u": "uüû",
+    "o": "oö",
+    "c": "cç",
+    "a": "aâ",
+}
+
+# Her Türkçe harfi kendi ASCII kökeniyle ilişkilendiren ters tablo.
+_HARF_KOKU = {
+    harf: kok
+    for kok, harfler in _HARF_GRUPLARI.items()
+    for harf in harfler
+}
+
+_desen_onbellegi = {}
+
+
+def tolerant_pattern(key):
+    """
+    Bir anahtar kelime için Türkçe karakter toleranslı regex üretir.
+    Örn. "kuş" → k[uüû][sş] ; hem "kuş" hem "kus" eşleşir.
+    """
+    if key in _desen_onbellegi:
+        return _desen_onbellegi[key]
+
+    parcalar = []
+    for harf in key.lower():
+        kok = _HARF_KOKU.get(harf, harf)
+        grup = _HARF_GRUPLARI.get(kok)
+        if grup:
+            parcalar.append(f"[{grup}]")
+        else:
+            parcalar.append(re.escape(harf))
+
+    desen = r'\b' + "".join(parcalar) + r'\b'
+    _desen_onbellegi[key] = desen
+    return desen
+
+
+def word_match(key, text):
+    """Anahtar kelimenin metinde TAM KELİME olarak geçip geçmediğini kontrol eder."""
+    return re.search(tolerant_pattern(key), text) is not None
+
+
+def residual_text(text, matched_keys):
+    """
+    Sözlüklerde karşılığı bulunan kelimeleri metinden çıkarır.
+    Geriye yalnızca kullanıcının kendi yazdığı, çevrilmesi gereken
+    serbest ifade kalır. Böylece "battal" gibi terimler ikinci kez,
+    bu sefer anlamsız biçimde çevrilmez.
+    """
+    kalan = text
+    for key in matched_keys:
+        kalan = re.sub(tolerant_pattern(key), " ", kalan)
+    for filler in FILLER_WORDS:
+        kalan = re.sub(tolerant_pattern(filler), " ", kalan)
+
+    kalan = re.sub(r'[,\-.;:]+', " ", kalan)
+    kalan = re.sub(r'\s+', " ", kalan).strip()
+
+    # Tek harf / anlamsız kırıntılar çeviriye gönderilmez.
+    return kalan if len(kalan) >= 3 else ""
+
+
+def _en_ozgul_anahtarlar(anahtarlar):
+    """
+    Başka bir eşleşmenin içinde geçen anahtarları eler.
+    Örn. "ay yıldız" eşleştiyse "ay" ayrıca eklenmez,
+    "mavi-beyaz" eşleştiyse "mavi" ve "beyaz" tekrar eklenmez.
+    """
+    return [
+        anahtar for anahtar in anahtarlar
+        if not any(
+            anahtar != digeri and anahtar in digeri
+            for digeri in anahtarlar
+        )
+    ]
+
+
+def _tekrarsiz(anahtarlar, sozluk):
+    """
+    Aynı metni üreten anahtarları teke indirir.
+    "osmanli" ve "osmanlı" aynı palet tanımına bakıyor; Türkçe karakter
+    toleransı ikisini birden eşleştirdiği için palet tarifi prompt'a
+    iki kez giriyordu.
+    """
+    gorulen = set()
+    sonuc = []
+    for anahtar in anahtarlar:
+        metin = sozluk[anahtar]
+        if metin in gorulen:
+            continue
+        gorulen.add(metin)
+        sonuc.append(anahtar)
+    return sonuc
+
+
+# Uygulama palet seçimini "<palet> renklerinde" kalıbıyla gönderiyor.
+# Bazı palet adları nesne sözlüğünde de var ("lale" hem renk paleti
+# hem de "a classic tulip flower"). Palet olarak gelen kelime nesne
+# sayılmamalı, yoksa kullanıcı Lale paletini seçtiğinde ne isterse
+# istesin görselde lale çıkıyor.
+_PALET_KALIBI = re.compile(r'([\wÀ-ɏ-]+)\s+renklerinde')
+
+
+def palette_words(text):
+    """"<kelime> renklerinde" kalıbındaki palet adlarını döner."""
+    return set(_PALET_KALIBI.findall(text.lower()))
+
+
+def object_keys(text):
+    """
+    Metinde geçen nesne anahtarları. Palet olarak kullanılan
+    kelimeler hariç tutulur.
+    """
+    text = text.lower()
+    paletler = palette_words(text)
+    return [
+        k for k in OBJECT_PROMPTS
+        if k not in paletler and word_match(k, text)
+    ]
+
+
+def has_object(user_text):
+    """Kullanıcı somut bir nesne istemiş mi (araba, kuş, cami…)."""
+    return bool(object_keys(user_text))
+
+
+def enrich_prompt(user_text):
+
+    text = user_text.lower()
+    prompt_parts = []
+
+    # Önce hangi anahtarların eşleştiğini bul, sonra en özgül olanları seç.
+    eslesen = {
+        "nesne": object_keys(text),
+        "stil": [k for k in STYLE_PROMPTS if word_match(k, text)],
+        "renk": [k for k in COLOR_PROMPTS if word_match(k, text)],
+        "hareket": [k for k in ACTION_PROMPTS if word_match(k, text)],
+    }
+    _sozlukler = {
+        "nesne": OBJECT_PROMPTS,
+        "stil": STYLE_PROMPTS,
+        "renk": COLOR_PROMPTS,
+        "hareket": ACTION_PROMPTS,
+    }
+    for kategori in eslesen:
+        eslesen[kategori] = _tekrarsiz(
+            _en_ozgul_anahtarlar(eslesen[kategori]),
+            _sozlukler[kategori],
+        )
+
+    matched_keys = [k for liste in eslesen.values() for k in liste]
+
+    # Kullanıcı somut bir nesne istediyse (araba, kuş, cami…) prompt
+    # dengesi değişiyor.
+    #
+    # Ölçüm: nesne 1.3 ağırlıkla bir kez geçerken ebru fikri BASE_STYLE'ın
+    # 12 ifadesi + desen tarifi + LoRA + kalite ekleriyle defalarca
+    # tekrarlanıyordu. Model ağırlığın olduğu tarafa gidip nesneyi
+    # tamamen yutuyordu. Kısa promptla aynı model arabayı sorunsuz
+    # çiziyor, yani sorun modelde değil prompt dengesindeydi.
+    nesne_var = bool(eslesen["nesne"])
+
+    for key in eslesen["nesne"]:
+        prompt_parts.append(f"({OBJECT_PROMPTS[key]}:1.55)")
+
+    # Desen tarifleri tuvalin tamamını kaplayan kompozisyon emirleri
+    # ("spread evenly across the surface", "regular parallel rows").
+    # Nesne istendiğinde bunlar nesneyle doğrudan çelişiyor ve onu
+    # siliyor; o yüzden tarif tamamen çıkarılıp yerine yalnızca desenin
+    # adı kısa bir doku ipucu olarak bırakılıyor.
+    for key in eslesen["stil"]:
+        if nesne_var:
+            prompt_parts.append(f"{key} style marbling texture")
+        else:
+            prompt_parts.append(f"({STYLE_PROMPTS[key]}:1.2)")
+
+    for key in eslesen["renk"]:
+        prompt_parts.append(COLOR_PROMPTS[key])
+
+    for key in eslesen["hareket"]:
+        prompt_parts.append(ACTION_PROMPTS[key])
+
+    # Sözlükte karşılığı olmayan kısım varsa çevrilir.
+    # Hepsi eşleştiyse çeviri servisine hiç gidilmez.
+    kalan = residual_text(text, matched_keys)
+    if kalan:
+        prompt_parts.append(translate_cached(kalan))
+    else:
+        print("⏩ Serbest metin yok, çeviri atlandı")
+
+    prompt_parts.append(BASE_STYLE_SHORT if nesne_var else BASE_STYLE)
+
+    final_prompt = ", ".join(prompt_parts)
+    print("\n✨ OLUŞAN PROMPT:")
+    print(final_prompt)
+    return final_prompt
+# =====================================
+# BACKEND KAYIT VE SAĞLIK UÇLARI
+# =====================================
+# =====================================
+# HESAP UÇLARI
+# =====================================
+kullanicilar.kur()
+
+
+def oturum_kullanicisi():
+    """
+    İstekteki oturum anahtarından kullanıcıyı çözer.
+    Anahtar `Authorization: Bearer <token>` başlığında gelir.
+    """
+    baslik = request.headers.get("Authorization", "")
+    if baslik.startswith("Bearer "):
+        return kullanicilar.oturumu_coz(baslik[7:].strip())
+    return None
+
+
+@app.route("/auth/register", methods=["POST"])
+def auth_register():
+    data = request.get_json(silent=True) or {}
+    try:
+        token, ad = kullanicilar.kayit_ol(
+            data.get("username"), data.get("password")
+        )
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"👤 Yeni hesap: {ad}")
+    return jsonify({
+        "status": "success",
+        "token": token,
+        "username": ad,
+        "is_admin": _yonetici_mi(ad),
+    }), 201
+
+
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json(silent=True) or {}
+    try:
+        token, ad = kullanicilar.giris_yap(
+            data.get("username"), data.get("password")
+        )
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+
+    print(f"🔑 Giriş: {ad}")
+    return jsonify({
+        "status": "success",
+        "token": token,
+        "username": ad,
+        "is_admin": _yonetici_mi(ad),
+    })
+
+
+@app.route("/auth/me", methods=["GET"])
+def auth_me():
+    """Uygulama açılışta oturumun hâlâ geçerli olduğunu buradan anlar."""
+    kullanici = oturum_kullanicisi()
+    if not kullanici:
+        return jsonify({
+            "status": "error",
+            "message": "Oturum geçersiz",
+        }), 401
+
+    return jsonify({
+        "status": "success",
+        "username": kullanici["kullanici_adi"],
+        "daily_used": kullanicilar.gunluk_sayi(kullanici["id"]),
+        "daily_limit": DAILY_LIMIT,
+        "is_admin": _yonetici_mi(kullanici["kullanici_adi"]),
+    })
+
+
+@app.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    baslik = request.headers.get("Authorization", "")
+    if baslik.startswith("Bearer "):
+        kullanicilar.cikis_yap(baslik[7:].strip())
+    return jsonify({"status": "success"})
+
+
+@app.route("/register-backend", methods=["POST"])
+def register_backend():
+    """
+    Colab notebook'u açılışta tünel adresini buraya bildirir.
+    Drive üzerinden URL okuma yöntemi tamamen kaldırıldı.
+    """
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+    url = (data.get("url") or "").strip().rstrip("/")
+
+    if not secrets.compare_digest(str(token), REGISTER_TOKEN):
+        print("⛔ Geçersiz token ile kayıt denemesi")
+        return jsonify({
+            "status": "error",
+            "message": "Geçersiz token"
+        }), 403
+
+    if not url.startswith("https://") or not any(
+        host in url for host in ALLOWED_TUNNEL_HOSTS
+    ):
+        return jsonify({
+            "status": "error",
+            "message": "Desteklenmeyen tünel adresi"
+        }), 400
+
+    with _state_lock:
+        _state["remote_url"] = url
+        _state["registered_at"] = time.time()
+
+    # Kayıttan hemen sonra doğrula, bir sonraki döngüyü bekleme.
+    refresh_health()
+
+    with _state_lock:
+        ok = _state["remote_ok"]
+
+    print(f"📡 Backend kaydedildi: {url} (erişilebilir: {ok})")
+    return jsonify({
+        "status": "success",
+        "reachable": ok
+    })
+
+
+@app.route("/progress", methods=["GET"])
+def progress():
+    """
+    Süren üretimin ilerlemesini döner. Uygulama bunu saniyede bir
+    çağırıp gerçek bir ilerleme çubuğu gösterebilir.
+    """
+    active_url, kaynak = get_active_url()
+
+    with _queue_lock:
+        bekleyen = _queue_length
+
+    if active_url is None:
+        return jsonify({
+            "status": "success",
+            "progress": 0.0,
+            "eta_seconds": None,
+            "queue_length": bekleyen,
+            "ready": False,
+        })
+
+    veri = get_progress_cached(active_url)
+
+    return jsonify({
+        "status": "success",
+        "progress": veri.get("progress", 0.0),
+        "eta_seconds": veri.get("eta_relative"),
+        "queue_length": bekleyen,
+        "source": kaynak,
+        "ready": True,
+    })
+
+
+# İzleme ekranına erişebilecek hesap. Bu kullanıcı adıyla giriş
+# yapan kişi yönetici sayılıyor; ayrıca bir anahtar girmesi gerekmiyor.
+# Şifre kodda tutulmuyor, hesabın kendi şifresi geçerli.
+ADMIN_KULLANICI = os.environ.get("EBRU_ADMIN_USER", "boss")
+
+
+def _yonetici_mi(kullanici_adi):
+    """Bu kullanıcı adı yönetici mi."""
+    return (kullanici_adi or "").lower() == ADMIN_KULLANICI.lower()
+
+
+def _yonetici_yetkili():
+    """
+    İzleme uçlarına erişim iki yoldan verilebiliyor:
+      1. Yönetici hesabıyla açılmış bir oturum (uygulama bunu kullanır)
+      2. Kayıt anahtarı (komut satırı ve tarayıcıdan hızlı erişim için)
+    """
+    kullanici = oturum_kullanicisi()
+    if kullanici and _yonetici_mi(kullanici["kullanici_adi"]):
+        return True
+
+    verilen = (
+        request.args.get("token")
+        or request.headers.get("X-Admin-Token", "")
+    )
+    return secrets.compare_digest(str(verilen), REGISTER_TOKEN)
+
+
+@app.route("/stats", methods=["GET"])
+def stats():
+    """Son istekler ve kullanım özeti (JSON)."""
+    if not _yonetici_yetkili():
+        return jsonify({
+            "status": "error",
+            "message": "Yetkisiz",
+        }), 403
+
+    with _gecmis_lock:
+        gecmis = list(_gecmis)
+        sayaclar = dict(_sayaclar)
+
+    # Hesaplı kullanıcılar veritabanından, hesapsız istekler (web
+    # sitesi) bellekten geliyor.
+    cihazlar = kullanicilar.bugunku_kullanicilar()
+
+    bugun = time.strftime("%Y-%m-%d")
+    with _usage_lock:
+        cihazlar += [
+            {"kimlik": k, "bugun": v["sayi"]}
+            for k, v in _usage.items()
+            if isinstance(v, dict) and v.get("gun") == bugun
+        ]
+    cihazlar.sort(key=lambda c: c["bugun"], reverse=True)
+
+    with _queue_lock:
+        bekleyen = _queue_length
+
+    with _jobs_lock:
+        aktif_isler = sum(
+            1 for j in _jobs.values()
+            if j["status"] in ("queued", "running")
+        )
+
+    return jsonify({
+        "status": "success",
+        "sayaclar": sayaclar,
+        "kuyruk": bekleyen,
+        "aktif_isler": aktif_isler,
+        "gunluk_limit": DAILY_LIMIT,
+        "cihazlar": cihazlar,
+        "istekler": list(reversed(gecmis)),
+    })
+
+
+@app.route("/admin", methods=["GET"])
+def admin():
+    """Tarayıcıdan bakılabilen basit izleme paneli."""
+    if not _yonetici_yetkili():
+        return (
+            "<h3>Yetkisiz</h3>"
+            "<p>Adresin sonuna ?token=KAYIT_ANAHTARIN ekle.</p>",
+            403,
+        )
+    return render_template("admin.html", token=request.args.get("token", ""))
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """
+    Uygulamanın açılışta çağırdığı durum ucu. Kullanıcıya
+    'sunucuya bağlanılamadı' yerine anlamlı bir mesaj göstermeyi sağlar.
+    """
+    with _state_lock:
+        durum = dict(_state)
+
+    aktif = "colab" if durum["remote_ok"] else (
+        "local" if durum["local_ok"] else None
+    )
+
+    with _queue_lock:
+        bekleyen = _queue_length
+
+    return jsonify({
+        "status": "success",
+        "ready": aktif is not None,
+        "active_source": aktif,
+        "colab_registered": durum["remote_url"] is not None,
+        "colab_ok": durum["remote_ok"],
+        "local_ok": durum["local_ok"],
+        "last_check": durum["last_check"],
+        "queue_length": bekleyen,
+        "daily_limit": DAILY_LIMIT,
+        "message": (
+            "Üretim için hazır" if aktif
+            else "Görsel üretim sunucusu şu anda kapalı"
+        ),
+    })
+# =====================================
+# WEB SAYFALARI
+# =====================================
+@app.route("/")
+def home():
+    return render_template(
+        "index.html"
+    )
+@app.route("/nasil-calisir")
+def nasil_calisir():
+
+    return render_template(
+        "nasil_calisir.html"
+    )
+@app.route("/ornekler")
+def ornekler():
+
+    return render_template(
+        "ornekler.html"
+    )
+@app.route("/proje-ekibi")
+def proje_ekibi():
+
+    return render_template(
+        "proje_ekibi.html"
+    )
+
+
+@app.route("/giris")
+def giris_sayfasi():
+    """Site üzerinden hesap açma ve giriş."""
+    return render_template("giris.html")
+
+
+# Mobil uygulamanın indirileceği dosya. Derlenen APK buraya
+# kopyalanıyor ki site sabit bir yoldan sunabilsin.
+APK_KLASORU = os.path.join(WEB_KLASORU, "static", "indir")
+APK_DOSYA = "ebru-ai.apk"
+
+
+@app.route("/indir")
+def indir_sayfasi():
+    """Mobil uygulama tanıtım ve indirme sayfası."""
+    yol = os.path.join(APK_KLASORU, APK_DOSYA)
+    var_mi = os.path.exists(yol)
+    boyut = round(os.path.getsize(yol) / (1024 * 1024), 1) if var_mi else 0
+
+    return render_template(
+        "indir.html",
+        apk_var=var_mi,
+        apk_boyut=boyut,
+    )
+
+
+@app.route("/apk")
+def apk_indir():
+    """APK dosyasını indirir."""
+    yol = os.path.join(APK_KLASORU, APK_DOSYA)
+    if not os.path.exists(yol):
+        return "Uygulama dosyası henüz yüklenmedi.", 404
+
+    return send_from_directory(
+        APK_KLASORU,
+        APK_DOSYA,
+        as_attachment=True,
+        download_name="EbruAI.apk",
+    )
+# =====================================
+# GÖRSEL ÜRETME API
+# =====================================
+# SDXL'in eğitildiği en/boy oranlarına yakın, 6 GB VRAM'de taşma
+# yapmadan üretilebilen ölçüler.
+#
+# NOT: Daha önce 832x1216 kullanılıyordu. LoRA 1024px'de eğitildiği
+# için kalite açısından doğruydu ama 6 GB karta sığmayıp modeli sistem
+# belleğine taşıtıyor, adım süresi ~16 saniyeye çıkıyordu (görsel başına
+# ~6,5 dakika). Piksel sayısı düşürülerek kullanılabilir hale getirildi.
+# Ölçüm sonucu: 6 GB kartta 0,88 MP (768x1152) bile VRAM'i doldurup
+# sistem belleğine taşmaya yol açıyor ve adım süresi ~18 saniyeye
+# çıkıyor. Orijinal 768x768 (0,59 MP) sığdığı için hızlıydı.
+# Aşağıdaki ölçüler o piksel bandına yakın tutuldu.
+SUPPORTED_SIZES = (
+    (704, 1024),    # dikey — telefon duvar kağıdı için varsayılan (0,72 MP)
+    (640, 1024),    # daha uzun dikey (0,66 MP)
+    (768, 768),     # kare (0,59 MP)
+    (1024, 704),    # yatay
+)
+
+DEFAULT_SIZE = (704, 1024)
+
+# =====================================
+# HIZLANDIRMA: SDXL-LIGHTNING
+# =====================================
+# 6 GB VRAM'de SDXL zaten kartı doldurduğu için adım başına ~13-18 sn
+# harcanıyordu. Lightning LoRA, 16 yerine 4 adımda üretim yapmayı
+# sağlayarak süreyi yaklaşık dörtte bire indiriyor.
+#
+# Lightning kendine özgü ayarlar ister:
+#   - çok düşük CFG (1.0-2.0), yüksek CFG görüntüyü yakar
+#   - Euler örnekleyici + sgm_uniform zamanlayıcı
+#   - LoRA'nın prompt'a eklenmesi
+LIGHTNING_LORA = "sdxl_lightning_4step_lora"
+
+# LoRA klasörü A1111'in kurulumuna bağlı. Sunucu başka bir makinede
+# çalıştığında yerleşim değiştiği için EBRU_LORA_DIR ile verilebilir.
+LORA_KLASORU = os.environ.get("EBRU_LORA_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "stable-diffusion-webui", "models", "Lora",
+)
+
+_lightning_path = os.path.join(
+    LORA_KLASORU,
+    f"{LIGHTNING_LORA}.safetensors",
+)
+
+# Dosya varsa otomatik devreye girer; EBRU_LIGHTNING=0 ile kapatılabilir.
+LIGHTNING_ENABLED = (
+    os.path.exists(_lightning_path)
+    and os.environ.get("EBRU_LIGHTNING", "1") == "1"
+)
+
+if LIGHTNING_ENABLED:
+    # Ölçüm: 4 adım ~94 sn, 6 adım ~116 sn. LoRA zaten 4 adım için
+    # eğitildiği için kalite farkı gözle görülmüyor.
+    STEPS = int(os.environ.get("EBRU_STEPS", "4"))
+    CFG_SCALE = float(os.environ.get("EBRU_CFG", "1.8"))
+    SAMPLER = os.environ.get("EBRU_SAMPLER", "Euler")
+    SCHEDULER = os.environ.get("EBRU_SCHEDULER", "SGM Uniform")
+else:
+    STEPS = int(os.environ.get("EBRU_STEPS", "16"))
+    CFG_SCALE = float(os.environ.get("EBRU_CFG", "8.5"))
+    SAMPLER = os.environ.get("EBRU_SAMPLER", "DPM++ 2M")
+    SCHEDULER = os.environ.get("EBRU_SCHEDULER", "Karras")
+
+
+def pick_size(data):
+    """
+    İstenen en/boy oranına en yakın desteklenen çözünürlüğü seçer.
+    Uygulama ekran oranını gönderirse duvar kağıdı kırpılmadan oturur.
+    """
+    try:
+        oran = data.get("aspect_ratio")
+        if oran is None:
+            genislik = data.get("width")
+            yukseklik = data.get("height")
+            if not genislik or not yukseklik:
+                return DEFAULT_SIZE
+            oran = float(genislik) / float(yukseklik)
+        oran = float(oran)
+        if oran <= 0:
+            return DEFAULT_SIZE
+    except (TypeError, ValueError):
+        return DEFAULT_SIZE
+
+    return min(
+        SUPPORTED_SIZES,
+        key=lambda boyut: abs((boyut[0] / boyut[1]) - oran)
+    )
+
+
+def perform_generation(data, kimlik, ip="-", kullanici=None,
+                       job_id=None, on_start=None):
+    """
+    Üretimi çalıştırır ve sonucu istek geçmişine yazar.
+    Döner: (govde_sozlugu, http_kodu)
+    """
+    baslangic = time.time()
+    govde, kod = _uretimi_calistir(
+        data, kimlik, kullanici, job_id, on_start
+    )
+
+    istek_kaydet(
+        kimlik=kimlik,
+        ip=ip,
+        prompt=data.get("prompt"),
+        durum=govde.get("status", "error"),
+        sure=time.time() - baslangic,
+        kaynak=govde.get("source"),
+        mesaj=(
+            govde.get("message")
+            if govde.get("status") != "success" else None
+        ),
+    )
+    return govde, kod
+
+
+def _uretimi_calistir(data, kimlik, kullanici=None,
+                      job_id=None, on_start=None):
+    """
+    Asıl üretim işi. Hem senkron /generate ucundan hem de asenkron
+    iş kuyruğundan çağrılır.
+
+    Flask'a özgü bir şey döndürmez ki arka plan thread'inden de
+    çağrılabilsin.
+    """
+    print("\n======================")
+    print("🔔 YENİ İSTEK")
+    print("======================")
+    try:
+        # ------------------------------
+        # Kullanıcı verisini al
+        # ------------------------------
+        user_prompt = data.get(
+            "prompt"
+        )
+        print(
+            "📥 Kullanıcı:",
+            user_prompt
+        )
+        if not user_prompt or not str(user_prompt).strip():
+            return {
+                "status": "error",
+                "message": "Boş prompt gönderildi",
+            }, 400
+        # ------------------------------
+        # KAYNAK KONTROLÜ
+        # ------------------------------
+        # Üretim sunucusu kapalıysa prompt/çeviri işine hiç girilmez.
+        if get_active_url()[0] is None:
+            # Durum bayatlamış olabilir, bir kez tazeleyip tekrar bak.
+            refresh_health()
+            if get_active_url()[0] is None:
+                print("⛔ Hiçbir üretim sunucusu ayakta değil")
+                return {
+                    "status": "error",
+                    "message": (
+                        "Görsel üretim sunucusu şu anda kapalı. "
+                        "Lütfen biraz sonra tekrar dene."
+                    ),
+                }, 503
+        # ------------------------------
+        # KULLANIM SINIRI
+        # ------------------------------
+        izin_var, sinir_mesaji, bekleme = check_rate_limit(
+            kimlik, kullanici
+        )
+        if not izin_var:
+            print(f"🚦 Sınır aşıldı ({kimlik}): {sinir_mesaji}")
+            return {
+                "status": "error",
+                "message": sinir_mesaji,
+                "retry_after": bekleme,
+            }, 429
+        # ------------------------------
+        # YENİ PROMPT ENGINE
+        # ------------------------------
+        translated_prompt = enrich_prompt(
+            user_prompt
+        )
+        # ------------------------------
+        # LORA + MODEL PROMPT
+        # ------------------------------
+        nesne_var = has_object(user_prompt)
+
+        # Kullanıcı desen yoğunluğunu ayarladıysa o belirler; aksi
+        # halde paletin kendi ağırlığı geçerli (web sitesi bu yoldan
+        # geliyor ve kaydırıcı göndermiyor).
+        if data.get("intensity") is not None:
+            lora_weight = intensity_to_lora(data["intensity"])
+            print(
+                f"🎚️ Desen yoğunluğu %{data['intensity']} → "
+                f"LoRA {lora_weight}"
+            )
+        else:
+            lora_weight = get_lora_weight(user_prompt)
+
+        # Nesne istendiğinde ağırlığa tavan konuyor: ölçümde 0.60'a
+        # kadar nesne net kalıyor, üstünde doku onu yutuyor. Kullanıcı
+        # yoğunluğu sonuna çekse bile istediği nesneyi kaybetmesin.
+        if nesne_var and lora_weight > NESNE_LORA_TAVANI:
+            print(
+                f"🐈 Nesne istendi, LoRA {lora_weight} → {NESNE_LORA_TAVANI}"
+            )
+            lora_weight = NESNE_LORA_TAVANI
+
+        lora_tag = f"<lora:ebru_projesi-01:{lora_weight}>"
+
+        # Hızlandırıcı LoRA varsa ebru LoRA'sının yanına eklenir.
+        if LIGHTNING_ENABLED:
+            lora_tag = f"{lora_tag} <lora:{LIGHTNING_LORA}:1>"
+
+        final_prompt = (
+            f"{translated_prompt}, "
+            f"{improve_prompt_weight(lora_tag, nesne_var)}"
+        )
+
+        print(
+            "\n🚀 Stable Diffusion Prompt:"
+        )
+        print(
+            final_prompt
+        )
+        # ------------------------------
+        # ÇÖZÜNÜRLÜK VE SEED
+        # ------------------------------
+        genislik, yukseklik = pick_size(data)
+
+        # Seed gönderilirse aynı/benzer tasarım yeniden üretilebilir.
+        try:
+            seed = int(data.get("seed", -1))
+        except (TypeError, ValueError):
+            seed = -1
+        if seed < 0:
+            seed = random.randint(0, 2**31 - 1)
+
+        # ------------------------------
+        # STABLE DIFFUSION AYARLARI
+        # ------------------------------
+        payload = {
+            "prompt":
+            final_prompt,
+            "negative_prompt":
+            ADVANCED_NEGATIVE,
+            "steps":
+            STEPS,
+            "cfg_scale":
+            CFG_SCALE,
+            "width":
+            genislik,
+            "height":
+            yukseklik,
+            "seed":
+            seed,
+            "sampler_name":
+            SAMPLER,
+            "scheduler":
+            SCHEDULER,
+            "save_images":
+            SAVE_IMAGES,
+            "override_settings":
+            {
+                "sd_model_checkpoint":
+                "sd_xl_base_1.0"
+            },
+            "override_settings_restore_afterwards":
+            False
+        }
+        # ------------------------------
+        # AKTİF KAYNAK
+        # ------------------------------
+        # Kaynak arka planda zaten biliniyor; burada deneme-yanılma yok.
+        active_url, kaynak = get_active_url()
+
+        if active_url is None:
+            # Prompt hazırlanırken sunucu düşmüş olabilir.
+            return {
+                "status": "error",
+                "message": (
+                    "Görsel üretim sunucusu şu anda kapalı. "
+                    "Lütfen biraz sonra tekrar dene."
+                ),
+            }, 503
+
+        print(f"✅ Kaynak: {kaynak} → {active_url}")
+
+        # ------------------------------
+        # SIRAYA GİR VE ÜRET
+        # ------------------------------
+        # Tek GPU olduğu için aynı anda yalnızca bir üretim çalışır.
+        try:
+            with gpu_slot():
+                # Sıra beklerken iptal edilmiş olabilir. GPU'yu almış
+                # olsak bile burada durursak boşa üretim yapılmıyor.
+                if job_id and _iptal_edildi_mi(job_id):
+                    print(f"🛑 Sırası gelen iş iptalli, üretim yapılmadı")
+                    return {
+                        "status": "error",
+                        "message": "Üretim iptal edildi.",
+                    }, 409
+
+                if on_start:
+                    on_start()
+
+                try:
+                    response = http.post(
+                        f"{active_url}/sdapi/v1/txt2img",
+                        json=payload,
+                        timeout=GENERATE_TIMEOUT
+                    )
+                    if "text/html" in response.headers.get(
+                        "Content-Type", ""
+                    ):
+                        raise Exception("Sunucu arayüz sayfası döndürdü")
+                except Exception as e:
+                    print(f"⚠️ {kaynak} başarısız:", e)
+
+                    # Uzak sunucu düştüyse yerel GPU'ya geç.
+                    if kaynak != "colab":
+                        raise
+
+                    with _state_lock:
+                        _state["remote_ok"] = False
+
+                    yedek_url, yedek_kaynak = get_active_url()
+                    if yedek_url is None:
+                        raise Exception(
+                            "Üretim sunucusuna ulaşılamadı"
+                        )
+
+                    print(f"🔁 Yedeğe geçiliyor: {yedek_kaynak}")
+                    response = http.post(
+                        f"{yedek_url}/sdapi/v1/txt2img",
+                        json=payload,
+                        timeout=GENERATE_TIMEOUT
+                    )
+                    kaynak = yedek_kaynak
+        except KuyrukDolu:
+            refund_quota(kimlik, kullanici)
+            print("🚧 Kuyruk dolu, istek reddedildi")
+            return {
+                "status": "error",
+                "message": (
+                    "Şu anda çok yoğunluk var. "
+                    "Lütfen birkaç dakika sonra tekrar dene."
+                ),
+            }, 429
+        except KuyrukZamanAsimi:
+            refund_quota(kimlik, kullanici)
+            print("⌛ Sırada bekleme süresi doldu")
+            return {
+                "status": "error",
+                "message": (
+                    "Sıra beklerken süre doldu. "
+                    "Lütfen tekrar dene."
+                ),
+            }, 503
+        except Exception:
+            refund_quota(kimlik, kullanici)
+            raise
+        # ------------------------------
+        # SONUÇ
+        # ------------------------------
+        if response.status_code == 200:
+            result = response.json()
+            image_base64 = (
+                result["images"][0]
+            )
+            image_url = (
+                "data:image/png;base64,"
+                +
+                image_base64
+            )
+            return {
+                "status": "success",
+                "message": "Eser başarıyla oluşturuldu",
+                "prompt": final_prompt,
+                "image": image_url,
+                "seed": seed,
+                "width": genislik,
+                "height": yukseklik,
+                "source": kaynak,
+            }, 200
+        else:
+            refund_quota(kimlik, kullanici)
+            return {
+                "status": "error",
+                "message": response.text,
+            }, 502
+    except Exception as e:
+        print(
+            "❌ HATA:",
+            e
+        )
+        return {
+            "status": "error",
+            "message": str(e),
+        }, 500
+
+
+# =====================================
+# SENKRON ÜRETİM UCU (web sitesi kullanıyor)
+# =====================================
+@app.route("/generate", methods=["POST"])
+def generate_image():
+    """
+    Sonucu bekleyerek döndürür. Web arayüzü bunu kullanıyor.
+    Mobil uygulama, uzun süren isteklerde tünel zaman aşımına
+    takılmamak için asenkron uçları kullanmalı.
+    """
+    data = request.get_json(silent=True) or {}
+    govde, kod = perform_generation(data, client_id(), client_ip())
+    return jsonify(govde), kod
+
+
+# =====================================
+# ASENKRON ÜRETİM (İŞ KUYRUĞU)
+# =====================================
+# Üretim 90 saniyeyi aşabiliyor; Cloudflare gibi tüneller ise ~100
+# saniyede bağlantıyı kesiyor. Uzun HTTP bağlantısı kurmamak için
+# istek hemen bir iş numarasıyla yanıtlanır, sonuç ayrı uçtan sorulur.
+
+JOB_TTL = int(os.environ.get("EBRU_JOB_TTL", "900"))   # saniye
+
+_jobs = {}
+_jobs_lock = threading.Lock()
+
+
+def _job_temizle():
+    """Süresi dolmuş işleri bellekten siler."""
+    simdi = time.time()
+    with _jobs_lock:
+        for anahtar in [
+            k for k, v in _jobs.items()
+            if simdi - v["updated"] > JOB_TTL
+        ]:
+            del _jobs[anahtar]
+
+
+def _iptal_edildi_mi(job_id):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        return bool(job and job.get("cancelled"))
+
+
+def _job_calistir(job_id, data, kimlik, ip, kullanici=None):
+    """Arka planda üretimi yapıp sonucu iş kaydına yazar."""
+    # Sıra beklerken iptal edilmiş olabilir.
+    if _iptal_edildi_mi(job_id):
+        _iptal_sonucu_yaz(job_id, kullanici)
+        return
+
+    def _basladi():
+        """GPU sırası bu işe geldiğinde çağrılıyor."""
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "running"
+                _jobs[job_id]["updated"] = time.time()
+
+    govde, kod = perform_generation(
+        data, kimlik, ip, kullanici, job_id, _basladi
+    )
+
+    # Üretim sırasında iptal edildiyse sonucu kullanıcıya verme.
+    if _iptal_edildi_mi(job_id):
+        _iptal_sonucu_yaz(job_id, kullanici)
+        return
+
+    with _jobs_lock:
+        if job_id not in _jobs:
+            return  # iş bu arada süresi dolup silinmiş
+        _jobs[job_id]["status"] = (
+            "done" if kod == 200 else "error"
+        )
+        _jobs[job_id]["result"] = govde
+        _jobs[job_id]["code"] = kod
+        _jobs[job_id]["updated"] = time.time()
+
+
+def _iptal_sonucu_yaz(job_id, kullanici=None):
+    """İptal edilen işi sonuçlandırır ve kullanılan hakkı geri verir."""
+    if kullanici:
+        kullanicilar.kullanim_azalt(kullanici["id"])
+
+    with _jobs_lock:
+        if job_id not in _jobs:
+            return
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["result"] = {
+            "status": "error",
+            "message": "Bu üretim yönetici tarafından iptal edildi.",
+        }
+        _jobs[job_id]["code"] = 409
+        _jobs[job_id]["updated"] = time.time()
+
+    print(f"🛑 İş iptal edildi: {job_id}")
+
+
+@app.route("/admin/jobs", methods=["GET"])
+def admin_jobs():
+    """Bekleyen ve süren işleri listeler."""
+    if not _yonetici_yetkili():
+        return jsonify({"status": "error", "message": "Yetkisiz"}), 403
+
+    simdi = time.time()
+    with _jobs_lock:
+        isler = [
+            {
+                "job_id": jid,
+                "durum": j["status"],
+                "kimlik": j.get("kimlik", "-"),
+                "gecen": round(simdi - j["created"], 1),
+                "iptal": bool(j.get("cancelled")),
+            }
+            for jid, j in _jobs.items()
+            if j["status"] in ("queued", "running")
+        ]
+
+    isler.sort(key=lambda i: i["gecen"], reverse=True)
+    return jsonify({"status": "success", "isler": isler})
+
+
+@app.route("/admin/jobs/<job_id>/cancel", methods=["POST"])
+def admin_cancel_job(job_id):
+    """
+    Bir üretimi iptal eder.
+
+    Sıradaki iş hiç başlamadan düşer. Süren iş için A1111'e kesme
+    komutu gönderilir; GPU boşalır ve sıradaki isteğe geçilir.
+    """
+    if not _yonetici_yetkili():
+        return jsonify({"status": "error", "message": "Yetkisiz"}), 403
+
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return jsonify({
+                "status": "error",
+                "message": "İş bulunamadı",
+            }), 404
+
+        if job["status"] not in ("queued", "running"):
+            return jsonify({
+                "status": "error",
+                "message": "Bu iş zaten tamamlanmış",
+            }), 409
+
+        job["cancelled"] = True
+        suruyor = job["status"] == "running"
+
+    # Süren üretimi GPU tarafında kes.
+    if suruyor:
+        active_url, _ = get_active_url()
+        if active_url:
+            try:
+                probe_http.post(
+                    f"{active_url}/sdapi/v1/interrupt",
+                    timeout=HEALTH_TIMEOUT,
+                )
+            except Exception as e:
+                print("⚠️ Kesme komutu gönderilemedi:", e)
+
+    return jsonify({"status": "success", "job_id": job_id})
+
+
+@app.route("/jobs", methods=["POST"])
+def create_job():
+    """Üretim işini kuyruğa alır ve hemen iş numarası döner."""
+    _job_temizle()
+
+    # Mobil uygulama giriş yapmış olmalı: günlük hak hesaba bağlı ve
+    # kimin ne ürettiği izlenebilir olsun.
+    kullanici = oturum_kullanicisi()
+    if not kullanici:
+        return jsonify({
+            "status": "error",
+            "message": "Oturum açman gerekiyor",
+        }), 401
+
+    data = request.get_json(silent=True) or {}
+    kimlik = kullanici["kullanici_adi"]
+    # İstek bağlamı thread'e taşınamaz, şimdi okunmalı.
+    ip = client_ip()
+
+    if not data.get("prompt") or not str(data["prompt"]).strip():
+        return jsonify({
+            "status": "error",
+            "message": "Boş prompt gönderildi",
+        }), 400
+
+    job_id = secrets.token_urlsafe(12)
+
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "status": "queued",
+            "result": None,
+            "code": None,
+            "kimlik": kimlik,
+            "cancelled": False,
+            "created": time.time(),
+            "updated": time.time(),
+        }
+
+    threading.Thread(
+        target=_job_calistir,
+        args=(job_id, data, kimlik, ip, kullanici),
+        name=f"ebru-job-{job_id}",
+        daemon=True,
+    ).start()
+
+    with _queue_lock:
+        bekleyen = _queue_length
+
+    print(f"🎫 İş oluşturuldu: {job_id} (kuyruk: {bekleyen})")
+    return jsonify({
+        "status": "success",
+        "job_id": job_id,
+        "job_status": "queued",
+        "queue_length": bekleyen,
+    }), 202
+
+
+@app.route("/jobs/<job_id>", methods=["GET"])
+def get_job(job_id):
+    """
+    İşin durumunu döner. Bitmişse görsel de bu yanıtta gelir.
+    Uygulama bunu birkaç saniyede bir sorgular.
+    """
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return jsonify({
+                "status": "error",
+                "message": "İş bulunamadı veya süresi doldu",
+            }), 404
+
+        durum = job["status"]
+        sonuc = job["result"]
+        kod = job["code"]
+
+    # Sonuç hazırsa üretim yanıtını olduğu gibi ilet.
+    if durum in ("done", "error") and sonuc is not None:
+        govde = dict(sonuc)
+        govde["job_status"] = durum
+        return jsonify(govde), (200 if durum == "done" else kod or 500)
+
+    # Henüz sürüyor: ilerleme bilgisi ekle.
+    ilerleme = 0.0
+    kalan = None
+    active_url, _ = get_active_url()
+    if active_url and durum == "running":
+        veri = get_progress_cached(active_url)
+        ilerleme = veri.get("progress", 0.0) or 0.0
+        kalan = veri.get("eta_relative")
+
+    with _queue_lock:
+        bekleyen = _queue_length
+
+    return jsonify({
+        "status": "success",
+        "job_status": durum,
+        "progress": ilerleme,
+        "eta_seconds": kalan,
+        "queue_length": bekleyen,
+    }), 200
+
+    # =====================================
+# GELİŞMİŞ PROMPT KALİTE AYARLARI
+# =====================================
+def improve_prompt_weight(prompt, nesne_var=False):
+    """
+    Prompt'un sonuna kalite ekleri koyar.
+
+    Nesne istendiğinde "traditional Turkish ebru art" vurgusu
+    eklenmiyor: o ifade zaten prompt'ta birkaç kez geçiyor ve nesneyi
+    bastıran asıl etkenlerden biri.
+    """
+    if nesne_var:
+        return prompt + ", (masterpiece:1.05), (high quality:1.05)"
+
+    return (
+        prompt +
+        ", (traditional Turkish ebru art:1.1), "
+        "(masterpiece:1.1), (high quality:1.1)"
+    )
+# GELİŞMİŞ NEGATIVE PROMPT
+# =====================================
+ADVANCED_NEGATIVE = """
+bad quality,
+low resolution,
+blurry,
+pixelated,
+photorealistic,
+real photo,
+3d render,
+plastic texture,
+cartoon,
+anime,
+comic style,
+digital painting,
+wrong anatomy,
+deformed object,
+extra limbs,
+duplicate object,
+multiple subjects,
+bad composition,
+text,
+logo,
+watermark,
+signature,
+noise
+
+""".replace("\n"," ")
+# =====================================
+# SUNUCU BAŞLATMA
+# =====================================
+_health_thread = None
+
+
+def start_health_monitor():
+    """Arka plan sağlık kontrolünü başlatır (yalnızca bir kez)."""
+    global _health_thread
+    if _health_thread is not None and _health_thread.is_alive():
+        return
+    _health_thread = threading.Thread(
+        target=health_loop,
+        name="ebru-health",
+        daemon=True
+    )
+    _health_thread.start()
+
+
+# Modül içe aktarıldığında da başlasın (gunicorn vb. ile çalıştırıldığında
+# __main__ bloğu çalışmaz).
+start_health_monitor()
+
+
+if __name__ == "__main__":
+    print("""
+    ===================================
+       🎨 EBRU AI SUNUCUSU BAŞLADI
+    ===================================
+    Türkçe Prompt Engine Aktif ✅
+    Ebru Desen Sözlüğü Aktif ✅
+    Ebru LoRA Aktif ✅
+    """)
+
+    if _TOKEN_AUTO_GENERATED:
+        print("🔑 Kayıt anahtarı (bu açılışa özel):")
+        print(f"   {REGISTER_TOKEN}")
+        print("   Kalıcı yapmak için EBRU_REGISTER_TOKEN ortam")
+        print("   değişkenini ayarla.\n")
+
+    if LIGHTNING_ENABLED:
+        print(f"⚡ Hizlandirma      : {LIGHTNING_LORA} aktif")
+    else:
+        print("⚡ Hizlandirma      : kapali (Lightning LoRA bulunamadi)")
+    print(f"🎚️  Uretim ayarlari  : {STEPS} adim, CFG {CFG_SCALE}, "
+          f"{SAMPLER} / {SCHEDULER}")
+    print(f"💻 Yerel GPU adresi : {LOCAL_FALLBACK_URL}")
+    print("📡 Colab kaydı      : POST /register-backend")
+    print("❤️  Durum kontrolü   : GET  /health\n")
+
+    start_health_monitor()
+
+    # debug=True, Werkzeug hata ayıklayıcısını ağa açar ve uzaktan
+    # kod çalıştırmaya izin verebilir. Dağıtılan bir serviste kapalı olmalı.
+    hata_ayikla = os.environ.get("EBRU_DEBUG") == "1"
+
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=hata_ayikla,
+        threaded=True
+    )

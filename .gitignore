@@ -1,0 +1,73 @@
+# ==========================================================
+# GİZLİ VERİ — bunlar asla depoya girmemeli
+# ==========================================================
+
+# Kullanıcı hesapları, şifre hash'leri, oturum anahtarları
+*.db
+*.sqlite
+*.sqlite3
+
+# Ortam değişkenleri (kayıt anahtarı, yönetici hesabı vb.)
+.env
+.env.local
+
+# Tünel ve sunucu günlükleri (IP adresi ve istek içeriği barındırır)
+*.log
+
+# ==========================================================
+# ÜRETİLEN / İNDİRİLEN DOSYALAR
+# ==========================================================
+
+# Derlenmiş uygulama
+*.apk
+*.aab
+web/static/indir/
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.bak
+
+# Flutter / Dart
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+# NOT: pubspec.lock bilerek depoda tutuluyor — uygulamalarda
+# tekrarlanabilir derleme icin onerilen budur.
+
+# Android
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/app/build/
+mobile/android/build/
+*.jks
+*.keystore
+# Yayin anahtarinin parolalarini icerir. Ornek dosya
+# (key.properties.example) depoda, gerçegi asla girmemeli.
+mobile/android/key.properties
+
+# iOS — bu dosyalar yerel makinenin dosya yolunu içerir
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.framework
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Flutter/ephemeral/
+
+# Model dosyaları (büyük, ayrıca indirilmeli)
+*.safetensors
+*.ckpt
+
+# Editör
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Geçici üretim çıktıları
+*.tmp
+tunel*.txt

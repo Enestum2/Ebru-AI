@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebru AI - Galeri</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999">
+</head>
+<body>
+
+    <header id="mainHeader">
+        <div class="logo">Ebru<span>.AI</span></div>
+       <nav>
+    <ul>
+        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
+        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
+        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
+        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
+    </ul>
+</nav>
+        
+    </header>
+
+    <div style="max-width: 100%; overflow-x: hidden; padding-top: 60px;">
+        <h2 style="font-size: 3rem; font-weight: 900; text-align: center; margin-bottom: 10px;">Model <span class="gradient-text">Çıktıları</span></h2>
+        <p style="text-align: center; color: var(--text-muted); margin-bottom: 60px; font-size: 1.2rem;">Modelimizin ürettiği 704x1024 boyutundaki eşsiz şaheserler.</p>
+        
+        <!-- YENİ KARE VE SONSUZ AKAN GALERİ -->
+        <div class="marquee-container">
+            <div class="marquee-track">
+                
+                <!-- ========================================== -->
+                <!-- 1. VAGON (Senin Eklediğin 8 Özgün Resim) -->
+                <!-- ========================================== -->
+                <div class="marquee-group">
+                    
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt="Kırmızı ve krem tonlarında saf ebru deseni">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Saf ebru — nesne yok, ebru dokusu tam yoğunlukta</p>
+                        </div>
+                    </div>
+
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt="Osmanlı paletinde kırmızı gül">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Gül, Osmanlı renklerinde</p>
+                        </div>
+                    </div>
+
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-kedi-gece.jpg') }}" alt="Gece paletinde turuncu kedi">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Kedi, gece renklerinde</p>
+                        </div>
+                    </div>
+
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-lavanta-pastel.jpg') }}" alt="Pastel paletinde lavanta dalları">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Lavanta, pastel renklerinde</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ========================================== -->
+                <!-- 2. VAGON (Sonsuz Akış İçin Birebir Kopya) -->
+                <!-- ========================================== -->
+                <div class="marquee-group" aria-hidden="true">
+                    
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt="Kırmızı ve krem tonlarında saf ebru deseni">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Saf ebru — nesne yok, ebru dokusu tam yoğunlukta</p>
+                        </div>
+                    </div>
+
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt="Osmanlı paletinde kırmızı gül">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Gül, Osmanlı renklerinde</p>
+                        </div>
+                    </div>
+
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-kedi-gece.jpg') }}" alt="Gece paletinde turuncu kedi">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Kedi, gece renklerinde</p>
+                        </div>
+                    </div>
+
+                    <div class="gallery-card">
+                        <img src="{{ url_for('static', filename='images/uretim-lavanta-pastel.jpg') }}" alt="Pastel paletinde lavanta dalları">
+                        <div class="prompt-overlay">
+                            <span class="prompt-label">Prompt</span>
+                            <p class="prompt-text">Lavanta, pastel renklerinde</p>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <footer style="margin-top: 100px;">
+        
+    </footer>
+
+</body>
+</html>

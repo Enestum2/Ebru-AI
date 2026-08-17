@@ -1,0 +1,18 @@
+# Yayın imzalama anahtarı — ÖRNEK dosya.
+#
+# Bu dosyayı "key.properties" adıyla kopyala ve kendi değerlerini yaz.
+# Gerçek dosya .gitignore'da; parolalar depoya girmiyor.
+#
+# Anahtarı üretmek için (parolayı sen belirle, bir yere not et):
+#
+#   keytool -genkey -v -keystore ebru-release.jks \
+#           -keyalg RSA -keysize 2048 -validity 10000 -alias ebru
+#
+# ÖNEMLİ: ebru-release.jks dosyasını ve parolasını kaybetme. Kaybedersen
+# aynı imzayla yeni sürüm üretemezsin; kullanıcılar uygulamayı kaldırıp
+# kurmak zorunda kalır ve bütün eserleri silinir.
+
+storeFile=../ebru-release.jks
+storePassword=BURAYA_KEYSTORE_PAROLASI
+keyAlias=ebru
+keyPassword=BURAYA_ANAHTAR_PAROLASI

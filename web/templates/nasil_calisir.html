@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebru AI - Nasıl Çalışır?</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=20260814-2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+</head>
+<body>
+
+    <header id="mainHeader">
+        <div class="logo">Ebru<span>.AI</span></div>
+       <nav>
+    <ul>
+        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
+        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
+        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
+        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
+    </ul>
+</nav>
+    </header>
+
+    <div class="content-section">
+        <h2 class="page-title">Sistem <span class="gradient-text">Mimarisi</span></h2>
+        <p class="page-subtitle">Geleneksel sanatın yapay zeka ile işlenme serüveni.</p>
+        
+        <div class="timeline-container">
+            
+            <div class="step-row">
+                <div class="step-text-area">
+                    <div class="step-number">01</div>
+                    <h3 class="typewriter-heading gradient-text" data-text="Kullanıcı İstemi (Prompting)"></h3>
+                    <p class="typewriter-text" data-text="Kullanıcı, hayalindeki sahneyi doğal Türkçe diliyle sisteme girer. Örneğin: 'Boğazda gün batımı'. Sistem bu ham veriyi alır ve işleme hattına sokar."></p>
+                </div>
+                <div class="step-image-area">
+                    <div class="image-wrapper">
+                        <img src="{{ url_for('static', filename='images/adim-1.jpg') }}" alt="Hatip ebru örneği">
+                        <div class="overlay"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step-row reverse">
+                <div class="step-text-area">
+                    <div class="step-number">02</div>
+                    <h3 class="typewriter-heading gradient-text" data-text="NLP Çeviri Katmanı"></h3>
+                    <p class="typewriter-text" data-text="Backend sunucusu, gelen Türkçe metni Google Translate API altyapısını kullanarak İngilizceye çevirir ve 'Prompt Engineering' modülü ile Ebru sanatına uygun teknik terimleri komuta ekler."></p>
+                </div>
+                <div class="step-image-area">
+                    <div class="image-wrapper">
+                        <img src="{{ url_for('static', filename='images/adim-2.jpg') }}" alt="Gelgit ebru örneği">
+                        <div class="overlay"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step-row">
+                <div class="step-text-area">
+                    <div class="step-number">03</div>
+                    <h3 class="typewriter-heading gradient-text" data-text="Difüzyon Modeli & Render"></h3>
+                    <p class="typewriter-text" data-text="Hazırlanan komut, GPU üzerinde çalışan SDXL modeline iletilir. Model, 'Gürültüden Arındırma' (Denoising) işlemiyle 20 adımda piksel piksel Ebru sanatını oluşturur ve sonucu kullanıcıya sunar."></p>
+                </div>
+                <div class="step-image-area">
+                    <div class="image-wrapper">
+                        <img src="{{ url_for('static', filename='images/adim-3.jpg') }}" alt="Bülbül yuvası ebru örneği">
+                        <div class="overlay"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Ebru AI - TÜBİTAK Projesi - Tüm Hakları Saklıdır.</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
