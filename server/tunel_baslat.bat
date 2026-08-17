@@ -42,6 +42,20 @@ set "TUNNEL_ID="
 set "TUNNEL_CONFIG="
 set "TUNNEL_CRED_FILE="
 
+REM Tunel Windows servisi olarak kuruluysa ve calisiyorsa burada
+REM ikinci bir kopya acmanin anlami yok: ayni tunele iki baglayici
+REM baglanir. Servis zaten acilista kendiliginden kalkiyor.
+sc query Cloudflared 2>nul | find /i "RUNNING" >nul
+if not errorlevel 1 (
+    echo Tunel Windows servisi olarak calisiyor, ayrica baslatilmiyor.
+    echo Adres: https://ebruai.com
+    echo.
+    echo Durumu gormek icin: cloudflared tunnel info ebru
+    echo.
+    timeout /t 5 /nobreak >nul
+    exit /b 0
+)
+
 REM Kalici tunel icin gerekli iki dosya var mi?
 if not exist "%USERPROFILE%\.cloudflared\config.yml" goto hizli
 if not exist "%USERPROFILE%\.cloudflared\cert.pem"   goto hizli
