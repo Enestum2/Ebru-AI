@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<!-- Belirme animasyonlari yalnizca JavaScript varken devrede.
+     Betik yuklenmezse icerik gizli kalmasin diye isaret burada konuyor. -->
+<script>document.documentElement.classList.add("js");</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block baslik %}Ebru AI{% endblock %}</title>
+<meta name="description" content="{% block aciklama %}Geleneksel Türk ebru sanatını yapay zekâ ile üreten dijital atölye.{% endblock %}">
+<link rel="icon" href="{{ url_for('static', filename='images/logo.jpg') }}">
+
+<!-- Zemin rengi burada da yazılı: Tailwind yüklenene kadar sayfa beyaz
+     parlamasın diye. Tasarımın arka plan rengiyle birebir aynı. -->
+<style>html,body{background:#00142c;margin:0}</style>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+/* Stitch'teki "Ebru AI Wallpaper Design Refresh" tasarımının
+   yapılandırması. Değerler tasarımdan birebir alındı ve uygulamanın
+   lib/theme/app_theme.dart dosyasındaki renklerle aynı. */
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        "background": "#00142c",
+        "surface": "#00142c",
+        "surface-dim": "#00142c",
+        "surface-container-lowest": "#000e23",
+        "surface-container-low": "#011c3a",
+        "surface-container": "#05203e",
+        "surface-container-high": "#122b49",
+        "surface-container-highest": "#1e3654",
+        "surface-variant": "#1e3654",
+        "surface-bright": "#233a59",
+        "on-background": "#d4e3ff",
+        "on-surface": "#d4e3ff",
+        "on-surface-variant": "#c5c6ca",
+        "primary": "#c3c7cc",
+        "on-primary": "#2d3135",
+        "primary-container": "#101418",
+        "tertiary": "#89d5c1",
+        "on-tertiary": "#00382e",
+        "tertiary-fixed": "#a5f1dd",
+        "tertiary-container": "#001712",
+        "gold": "#c7a65a",
+        "ivory": "#f4f0e8",
+        "outline": "#8f9194",
+        "outline-variant": "#44474a",
+        "error": "#ffb4ab",
+        "on-error": "#690005"
+      },
+      borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+      spacing: { xs: "4px", base: "8px", sm: "12px", md: "24px", gutter: "24px", lg: "48px", xl: "80px" },
+      maxWidth: { "container-max": "1440px" },
+      fontFamily: {
+        "display-lg": ["Playfair Display", "serif"],
+        "display-lg-mobile": ["Playfair Display", "serif"],
+        "headline-md": ["Playfair Display", "serif"],
+        "headline-sm": ["Playfair Display", "serif"],
+        "body-lg": ["Inter", "system-ui", "sans-serif"],
+        "body-md": ["Inter", "system-ui", "sans-serif"],
+        "label-md": ["Inter", "system-ui", "sans-serif"],
+        "label-sm": ["Inter", "system-ui", "sans-serif"]
+      },
+      fontSize: {
+        "display-lg": ["64px", { lineHeight: "72px", letterSpacing: "-0.02em", fontWeight: "700" }],
+        "display-lg-mobile": ["40px", { lineHeight: "48px", fontWeight: "700" }],
+        "headline-md": ["32px", { lineHeight: "40px", fontWeight: "600" }],
+        "headline-sm": ["24px", { lineHeight: "32px", fontWeight: "500" }],
+        "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+        "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+        "label-md": ["14px", { lineHeight: "20px", letterSpacing: "0.05em", fontWeight: "600" }],
+        "label-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }]
+      }
+    }
+  }
+};
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ebru.css') }}?v=3">
+{% block ek_head %}{% endblock %}
+</head>
+
+<body class="bg-background font-body-md text-body-md text-on-background min-h-screen antialiased">
+
+<!-- Sayfanın altında yavaşça hareket eden sıvı zemin: tasarımdaki
+     "su içinde yayılan mürekkep" hissini veren katman. -->
+<div class="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+  <div class="akiskan akiskan-1"></div>
+  <div class="akiskan akiskan-2"></div>
+</div>
+
+<header id="ustBaslik" class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/20">
+  <div class="h-20 w-full max-w-container-max mx-auto px-md md:px-lg flex items-center justify-between gap-sm">
+
+    <a href="{{ url_for('home') }}" class="flex items-center gap-base shrink-0 group">
+      <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Ebru AI"
+           class="h-10 w-10 rounded-lg object-cover ring-1 ring-gold/30 transition-transform duration-700 group-hover:rotate-[20deg]">
+      <span class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest hidden sm:block">Ebru AI</span>
+    </a>
+
+    {% set menu = [
+      ('home',          '',        'Keşfet'),
+      ('home',          'olustur', 'Oluştur'),
+      ('ornekler',      '',        'Galeri'),
+      ('nasil_calisir', '',        'Nasıl Çalışır'),
+      ('indir_sayfasi', '',        'Uygulama')
+    ] %}
+
+    <nav class="hidden lg:flex items-center gap-md xl:gap-lg">
+      {% for uc, capa, ad in menu %}
+        <a href="{{ url_for(uc) }}{% if capa %}#{{ capa }}{% endif %}"
+           class="font-label-md text-label-md transition-colors
+                  {% if sayfa == uc and capa == (capa_etkin | default('')) %}text-tertiary font-bold{% else %}text-on-surface-variant hover:text-on-surface{% endif %}">{{ ad }}</a>
+      {% endfor %}
+    </nav>
+
+    <div class="flex items-center gap-sm">
+      <!-- Hesap durumunu hesap.js dolduruyor (giriş yapıldıysa ad + çıkış). -->
+      <div id="hesapAlani" class="flex items-center gap-sm"></div>
+
+      <button id="menuDugmesi" class="lg:hidden w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface"
+              aria-label="Menü" aria-expanded="false">
+        <span class="material-symbols-outlined">menu</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Küçük ekran menüsü -->
+  <nav id="mobilMenu" class="lg:hidden hidden border-t border-outline-variant/20 bg-surface-container-lowest/95 backdrop-blur-xl">
+    <div class="px-md py-sm flex flex-col">
+      {% for uc, capa, ad in menu %}
+        <a href="{{ url_for(uc) }}{% if capa %}#{{ capa }}{% endif %}"
+           class="py-sm font-label-md text-label-md text-on-surface-variant hover:text-tertiary transition-colors">{{ ad }}</a>
+      {% endfor %}
+    </div>
+  </nav>
+</header>
+
+<main class="relative z-10 w-full pt-20">
+{% block icerik %}{% endblock %}
+</main>
+
+<footer class="relative z-10 w-full bg-surface-container-lowest border-t border-outline-variant/10 py-lg mt-xl">
+  <div class="max-w-container-max mx-auto px-md md:px-lg grid grid-cols-1 md:grid-cols-2 gap-lg">
+    <div class="space-y-sm max-w-md">
+      <div class="flex items-center gap-base">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="" class="h-8 w-8 rounded object-cover">
+        <span class="text-on-surface font-headline-sm text-headline-sm uppercase tracking-wider">Ebru AI</span>
+      </div>
+      <p class="text-on-surface-variant font-body-md text-body-md">
+        Geleneksel Türk ebru sanatının yapay zekâ ile buluştuğu dijital atölye.
+        Görseller kendi eğittiğimiz SDXL modeliyle, kendi ekran kartımızda üretiliyor.
+      </p>
+    </div>
+
+    <div class="flex md:justify-end gap-xl">
+      <div class="flex flex-col gap-sm">
+        <span class="text-on-surface font-label-md text-label-md uppercase tracking-wider">Site</span>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır</a>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('ornekler') }}">Galeri</a>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('indir_sayfasi') }}">Uygulama</a>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('proje_ekibi') }}">Proje Ekibi</a>
+      </div>
+      <div class="flex flex-col gap-sm">
+        <span class="text-on-surface font-label-md text-label-md uppercase tracking-wider">Kaynak</span>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="https://github.com/enestum2/Ebru-AI" target="_blank" rel="noopener">GitHub</a>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="https://huggingface.co/enestum2/ebru-lora-sdxl" target="_blank" rel="noopener">Hugging Face</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-container-max mx-auto px-md md:px-lg mt-md pt-sm border-t border-outline-variant/10
+              flex flex-col sm:flex-row gap-xs justify-between items-start sm:items-center
+              text-on-surface-variant text-label-sm font-label-sm">
+    <p>&copy; 2026 Ebru AI · TÜBİTAK Projesi</p>
+    <p>SDXL + ekibin eğittiği ebru LoRA modeli · 704×1024</p>
+  </div>
+</footer>
+
+<script src="{{ url_for('static', filename='js/site.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/hesap.js') }}?v=3"></script>
+{% block ek_js %}{% endblock %}
+</body>
+</html>

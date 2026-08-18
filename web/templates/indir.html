@@ -1,99 +1,104 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ebru AI - Mobil Uygulama</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='hesap.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999-?">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-</head>
-<body>
+{% extends "taban.html" %}
+{% set sayfa = 'indir_sayfasi' %}
 
-<header id="mainHeader">
-    <div class="logo">Ebru<span>.AI</span></div>
-   <nav>
-    <ul>
-        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
-        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
-        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
-        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
-    </ul>
-</nav>
-</header>
+{% block baslik %}Ebru AI — Android Uygulaması{% endblock %}
+{% block aciklama %}Ebru AI mobil uygulaması: eserini duvar kağıdı yap, kişisel galerinde sakla.{% endblock %}
 
-<main class="indir-sayfa">
-    <div class="indir-ust">
-        <h1>Ebru AI <span class="gradient-text">Android</span></h1>
-        <p>
-            Ürettiğin eserleri doğrudan duvar kağıdı yap, galerinde sakla,
-            paylaş. Telefonuna kur, hesabınla giriş yap.
-        </p>
-    </div>
+{% block icerik %}
 
-    <div class="indir-kutu">
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-lg items-center">
+
+    <div class="lg:col-span-7 flex flex-col gap-md ac gorundu">
+      <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Android</span>
+      <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
+        Ebru AI<br><span class="text-gold">cebinde</span>
+      </h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
+        Ürettiğin eseri tek dokunuşla duvar kağıdı yap, galerinde sakla, paylaş.
+        Site ve uygulama aynı hesabı kullanır — birinde açtığın hesapla diğerine girebilirsin.
+      </p>
+
+      <div class="flex flex-col sm:flex-row gap-sm items-start sm:items-center mt-xs">
         {% if apk_var %}
-            <a href="{{ url_for('apk_indir') }}" class="primary-btn">
-                <i class="fa-solid fa-download"></i>&nbsp; Uygulamayı İndir
-            </a>
-            <div class="boyut">
-                APK · {{ apk_boyut }} MB · Android 8.0 ve üzeri
-            </div>
+          <a href="{{ url_for('apk_indir') }}"
+             class="altin-dugme inline-flex items-center gap-xs px-md py-sm rounded-full
+                    font-label-md text-label-md uppercase tracking-wider">
+            <span class="material-symbols-outlined text-[20px] relative z-10">download</span>
+            <span class="relative z-10">Uygulamayı indir</span>
+          </a>
+          <span class="font-label-sm text-label-sm text-outline">
+            APK · {{ apk_boyut }} MB · Android 8.0 ve üzeri
+          </span>
         {% else %}
-            <p style="color: var(--text-muted); margin: 0;">
-                Uygulama dosyası henüz yüklenmedi.
-            </p>
+          <div class="px-md py-sm rounded-full bg-surface-container text-on-surface-variant
+                      font-label-md text-label-md">
+            Uygulama dosyası henüz yüklenmedi.
+          </div>
         {% endif %}
+      </div>
     </div>
 
-    <div class="ozellikler">
-        <div class="ozellik">
-            <i class="fa-solid fa-wand-magic-sparkles"></i>
-            <h3>Örnekli seçim</h3>
-            <p>
-                Her renk paleti ve desen için gerçek örnekler görürsün.
-                Ne çıkacağını tahmin etmen gerekmez.
-            </p>
+    <!-- Telefon maketi -->
+    <div class="lg:col-span-5 flex justify-center ac ac-2">
+      <div class="relative w-60">
+        <div class="rounded-[36px] bg-surface-container-highest p-[6px] shadow-2xl
+                    rotate-[-4deg] hover:rotate-0 transition-transform duration-700">
+          <div class="rounded-[30px] overflow-hidden bg-black aspect-[9/19.5] relative">
+            <img src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt=""
+                 class="w-full h-full object-cover">
+            <div class="absolute top-3 left-1/2 -translate-x-1/2 w-1/3 h-5 bg-black rounded-full"></div>
+            <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent"></div>
+          </div>
         </div>
-        <div class="ozellik">
-            <i class="fa-solid fa-mobile-screen"></i>
-            <h3>Duvar kağıdı yap</h3>
-            <p>
-                Eseri tek dokunuşla kilit ekranına, ana ekrana ya da
-                ikisine birden uygula.
-            </p>
-        </div>
-        <div class="ozellik">
-            <i class="fa-solid fa-sliders"></i>
-            <h3>Desen yoğunluğu</h3>
-            <p>
-                Ebru dokusunun ne kadar baskın olacağını sen ayarla.
-                Nesne istediğinde de kaybolmaz.
-            </p>
-        </div>
-        <div class="ozellik">
-            <i class="fa-solid fa-images"></i>
-            <h3>Kişisel galeri</h3>
-            <p>
-                Ürettiğin her eser telefonunda saklanır. Favorile,
-                paylaş, benzerini üret.
-            </p>
-        </div>
+        <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 w-3/4 h-4 bg-black/50 blur-xl rounded-[100%]"></div>
+      </div>
     </div>
+  </div>
+</section>
 
-    <div class="kurulum-notu">
-        <strong>Kurulum:</strong> Android, bilinmeyen kaynaklardan gelen
-        uygulamalar için izin ister. İndirdikten sonra dosyayı açtığında
-        çıkan uyarıda <strong>“Bu kaynağa izin ver”</strong> demen yeterli.
-        Uygulama Play Store üzerinden dağıtılmadığı için bu adım normaldir.
-        <br><br>
-        Görsel üretimi kendi sunucumuzdaki ekran kartında yapılıyor.
-        Sunucu kapalıyken uygulama bunu açıkça belirtir.
+<!-- ==============================================================
+     ÖZELLİKLER
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-lg">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-sm">
+    {% for ikon, baslik, metin, i in [
+      ('wallpaper',    'Duvar kağıdı yap',   'Eseri kilit ekranına, ana ekrana ya da ikisine birden uygula.', 1),
+      ('photo_library','Kişisel galeri',      'Ürettiğin her eser telefonunda saklanır. Favorile, paylaş, benzerini üret.', 2),
+      ('palette',      'Örnekli seçim',       'Her palet ve desen için gerçek örnek görürsün; ne çıkacağını tahmin etmen gerekmez.', 3),
+      ('tune',         'Desen yoğunluğu',     'Ebru dokusunun ne kadar baskın olacağını sen ayarlarsın.', 4)
+    ] %}
+      <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-md
+                  hover:border-gold/30 transition-colors ac ac-{{ i }}">
+        <span class="material-symbols-outlined text-[32px] text-gold">{{ ikon }}</span>
+        <h3 class="font-headline-sm text-headline-sm text-on-surface mt-sm">{{ baslik }}</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">{{ metin }}</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ==============================================================
+     KURULUM NOTU
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pb-xl">
+  <div class="rounded-xl bg-surface-container-low border border-white/10 p-md ac">
+    <div class="flex gap-sm">
+      <span class="material-symbols-outlined text-gold shrink-0">info</span>
+      <div class="flex flex-col gap-sm">
+        <h2 class="font-headline-sm text-headline-sm text-on-surface">Kurulum</h2>
+        <p class="font-body-md text-body-md text-on-surface-variant">
+          Android, Play Store dışından gelen uygulamalar için izin ister. İndirdiğin
+          dosyayı açtığında çıkan uyarıda <strong class="text-on-surface">“Bu kaynağa izin ver”</strong>
+          demen yeterli. Uygulama mağaza üzerinden dağıtılmadığı için bu adım normaldir.
+        </p>
+        <p class="font-body-md text-body-md text-on-surface-variant">
+          Görsel üretimi kendi sunucumuzdaki ekran kartında yapılıyor. Sunucu kapalıyken
+          uygulama bunu açıkça belirtir; eserlerin telefonunda durmaya devam eder.
+        </p>
+      </div>
     </div>
-</main>
+  </div>
+</section>
 
-<script src="{{ url_for('static', filename='hesap.js') }}"></script>
-</body>
-</html>
+{% endblock %}

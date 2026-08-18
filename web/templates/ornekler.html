@@ -1,120 +1,187 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ebru AI - Galeri</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999">
-</head>
-<body>
+{% extends "taban.html" %}
+{% set sayfa = 'ornekler' %}
 
-    <header id="mainHeader">
-        <div class="logo">Ebru<span>.AI</span></div>
-       <nav>
-    <ul>
-        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
-        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
-        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
-        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
-    </ul>
-</nav>
-        
-    </header>
+{% block baslik %}Ebru AI — Galeri{% endblock %}
+{% block aciklama %}Modelin ürettiği eserler: 9 renk paleti ve 6 geleneksel desenin gerçek çıktıları.{% endblock %}
 
-    <div style="max-width: 100%; overflow-x: hidden; padding-top: 60px;">
-        <h2 style="font-size: 3rem; font-weight: 900; text-align: center; margin-bottom: 10px;">Model <span class="gradient-text">Çıktıları</span></h2>
-        <p style="text-align: center; color: var(--text-muted); margin-bottom: 60px; font-size: 1.2rem;">Modelimizin ürettiği 704x1024 boyutundaki eşsiz şaheserler.</p>
-        
-        <!-- YENİ KARE VE SONSUZ AKAN GALERİ -->
-        <div class="marquee-container">
-            <div class="marquee-track">
-                
-                <!-- ========================================== -->
-                <!-- 1. VAGON (Senin Eklediğin 8 Özgün Resim) -->
-                <!-- ========================================== -->
-                <div class="marquee-group">
-                    
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt="Kırmızı ve krem tonlarında saf ebru deseni">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Saf ebru — nesne yok, ebru dokusu tam yoğunlukta</p>
-                        </div>
-                    </div>
+{% block icerik %}
 
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt="Osmanlı paletinde kırmızı gül">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Gül, Osmanlı renklerinde</p>
-                        </div>
-                    </div>
+{# Palet ve desen listeleri uygulamadaki design_options.dart ile aynı
+   sırada; önizleme dosya adları da oradan türetiliyor. #}
+{% set paletler = [
+  ('osmanli',       'Osmanlı',       'Kızıl, altın ve fildişi'),
+  ('zumrut',        'Zümrüt',        'Derin yeşil, altın damarlı'),
+  ('okyanus',       'Okyanus',       'Mavi tonları ve beyaz köpük'),
+  ('gece',          'Gece',          'Lacivert, gümüş ve mor'),
+  ('lale',          'Lale',          'Gül pembesi ve kızıl'),
+  ('pastel',        'Pastel',        'Yumuşak, soluk tonlar'),
+  ('sari-kirmizi',  'Sarı-Kırmızı',  'Altın sarısı ve derin kırmızı'),
+  ('sari-lacivert', 'Sarı-Lacivert', 'Altın sarısı ve lacivert'),
+  ('siyah-beyaz',   'Siyah-Beyaz',   'Yüksek kontrast, tek renk')
+] %}
+{% set desenler = [
+  ('battal',        'Battal',        'Serbest damlatılmış organik lekeler'),
+  ('hatip',         'Hatip',         'Merkezî çiçek ve rozet motifi'),
+  ('tarakli',       'Taraklı',       'Tarakla çekilmiş düzenli dalgalar'),
+  ('bulbul_yuvasi', 'Bülbül yuvası', 'İç içe sarmal girdaplar'),
+  ('gelgit',        'Gelgit',        'İleri geri çekilmiş S kıvrımları'),
+  ('sal',           'Şal',           'İç içe geçen tüy benzeri doku')
+] %}
 
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-kedi-gece.jpg') }}" alt="Gece paletinde turuncu kedi">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Kedi, gece renklerinde</p>
-                        </div>
-                    </div>
-
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-lavanta-pastel.jpg') }}" alt="Pastel paletinde lavanta dalları">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Lavanta, pastel renklerinde</p>
-                        </div>
-                    </div>
-
-                </div>
-
-                <!-- ========================================== -->
-                <!-- 2. VAGON (Sonsuz Akış İçin Birebir Kopya) -->
-                <!-- ========================================== -->
-                <div class="marquee-group" aria-hidden="true">
-                    
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt="Kırmızı ve krem tonlarında saf ebru deseni">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Saf ebru — nesne yok, ebru dokusu tam yoğunlukta</p>
-                        </div>
-                    </div>
-
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt="Osmanlı paletinde kırmızı gül">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Gül, Osmanlı renklerinde</p>
-                        </div>
-                    </div>
-
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-kedi-gece.jpg') }}" alt="Gece paletinde turuncu kedi">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Kedi, gece renklerinde</p>
-                        </div>
-                    </div>
-
-                    <div class="gallery-card">
-                        <img src="{{ url_for('static', filename='images/uretim-lavanta-pastel.jpg') }}" alt="Pastel paletinde lavanta dalları">
-                        <div class="prompt-overlay">
-                            <span class="prompt-label">Prompt</span>
-                            <p class="prompt-text">Lavanta, pastel renklerinde</p>
-                        </div>
-                    </div>
-
-                </div>
-
-            </div>
-        </div>
+<!-- ==============================================================
+     BAŞLIK
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="flex flex-col md:flex-row md:items-end justify-between gap-md ac gorundu">
+    <div class="flex flex-col gap-xs">
+      <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Arşiv</span>
+      <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">Galeri</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+        Buradaki her görsel modelin gerçek çıktısı — hiçbiri temsilî çizim değil.
+        Uygulamada bir seçim yaptığında sana gösterilen örnekler de bunlar.
+      </p>
     </div>
 
-    <footer style="margin-top: 100px;">
-        
-    </footer>
+    <div class="flex gap-lg shrink-0">
+      <div class="text-right">
+        <div class="font-display-lg text-display-lg-mobile text-gold leading-none">63</div>
+        <div class="font-label-sm text-label-sm text-outline uppercase tracking-widest">örnek</div>
+      </div>
+      <div class="text-right">
+        <div class="font-display-lg text-display-lg-mobile text-on-surface leading-none">9×6</div>
+        <div class="font-label-sm text-label-sm text-outline uppercase tracking-widest">palet × desen</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-</body>
-</html>
+<!-- ==============================================================
+     ÖNE ÇIKANLAR
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-md">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+    {% for gorsel, ad, istek, i in [
+      ('uretim-saf-ebru.jpg',      'Saf ebru',        'nesne yok, doku tam yoğunlukta', 1),
+      ('uretim-gul-osmanli.jpg',   'Gül · Osmanlı',   'gül, Osmanlı renklerinde',       2),
+      ('uretim-kedi-gece.jpg',     'Kedi · Gece',     'kedi, gece renklerinde',         3),
+      ('uretim-lavanta-pastel.jpg','Lavanta · Pastel','lavanta, pastel renklerinde',    4)
+    ] %}
+      <figure class="eser-kart group relative rounded-xl overflow-hidden bg-surface-container ac ac-{{ i }}">
+        <div class="aspect-[4/5] overflow-hidden">
+          <img src="{{ url_for('static', filename='images/' + gorsel) }}" alt="{{ ad }}"
+               class="w-full h-full object-cover" loading="lazy">
+        </div>
+        <figcaption class="p-sm">
+          <div class="font-label-md text-label-md text-on-surface">{{ ad }}</div>
+          <div class="font-label-sm text-label-sm text-outline mt-xs">{{ istek }}</div>
+        </figcaption>
+      </figure>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ==============================================================
+     PALET × DESEN MATRİSİ
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-lg">
+  <div class="flex flex-col gap-sm mb-md ac">
+    <div class="flex items-center gap-base">
+      <span class="font-display-lg text-display-lg-mobile text-surface-variant leading-none">01</span>
+      <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest">Her palet, her desen</h2>
+    </div>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+      Bir palet seç: o paletin altı deseninin gerçek çıktısı aşağıda. Aynı desen
+      farklı palette bambaşka duruyor — seçimin sonucu bu kadar değiştiriyor.
+    </p>
+  </div>
+
+  <!-- Palet seçici -->
+  <div id="paletSecici" class="flex gap-sm overflow-x-auto pb-sm mb-md ac">
+    {% for id, ad, aciklama in paletler %}
+      <button type="button" data-palet="{{ id }}" title="{{ aciklama }}"
+              aria-pressed="{{ 'true' if loop.first else 'false' }}"
+              class="palet-sec shrink-0 flex items-center gap-xs pl-xs pr-sm py-xs rounded-full
+                     border transition-colors
+                     {% if loop.first %}border-gold/60 bg-surface-container text-gold
+                     {% else %}border-white/10 text-on-surface-variant hover:text-on-surface hover:border-white/25{% endif %}">
+        <img src="{{ url_for('static', filename='onizleme/palet_' + id + '.jpg') }}" alt=""
+             class="w-8 h-8 rounded-full object-cover" loading="lazy">
+        <span class="font-label-md text-label-md whitespace-nowrap">{{ ad }}</span>
+      </button>
+    {% endfor %}
+  </div>
+
+  <!-- Desen ızgarası: her palet için ayrı blok, seçili olan görünür -->
+  {% for pid, pad, paciklama in paletler %}
+    <div class="palet-blok {% if not loop.first %}hidden{% endif %}" data-blok="{{ pid }}">
+      <div class="flex items-baseline gap-sm mb-sm">
+        <h3 class="font-headline-sm text-headline-sm text-on-surface">{{ pad }}</h3>
+        <span class="font-label-sm text-label-sm text-outline">{{ paciklama }}</span>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-sm">
+        {% for dslug, dad, daciklama in desenler %}
+          <figure class="eser-kart group rounded-lg overflow-hidden bg-surface-container">
+            <div class="aspect-square overflow-hidden">
+              <img src="{{ url_for('static', filename='onizleme/desen_' + pid + '_' + dslug + '.jpg') }}"
+                   alt="{{ pad }} paletinde {{ dad }} deseni"
+                   class="w-full h-full object-cover" loading="lazy">
+            </div>
+            <figcaption class="p-xs">
+              <div class="font-label-md text-label-md text-on-surface">{{ dad }}</div>
+              <div class="font-label-sm text-label-sm text-outline leading-tight mt-xs">{{ daciklama }}</div>
+            </figcaption>
+          </figure>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</section>
+
+<!-- ==============================================================
+     ÜRETİME ÇAĞRI
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pb-xl">
+  <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-lg text-center ac">
+    <h2 class="font-headline-md text-headline-md text-on-surface mb-sm">Sıra sende</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xl mx-auto mb-md">
+      Beğendiğin paleti ve deseni seç, kendi eserini üret. Hesap açmak ücretsiz.
+    </p>
+    <a href="{{ url_for('home') }}#olustur"
+       class="altin-dugme inline-flex items-center gap-xs px-md py-sm rounded-full
+              font-label-md text-label-md uppercase tracking-wider">
+      <span class="material-symbols-outlined text-[20px] relative z-10">auto_awesome</span>
+      <span class="relative z-10">Ebruyu oluştur</span>
+    </a>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block ek_js %}
+<script>
+/* Palet seçimi: yalnızca seçili paletin desen bloğu görünür. */
+(function () {
+  const dugmeler = document.querySelectorAll('.palet-sec');
+  const bloklar = document.querySelectorAll('.palet-blok');
+
+  const secili = 'border-gold/60 bg-surface-container text-gold';
+  const bos = 'border-white/10 text-on-surface-variant hover:text-on-surface hover:border-white/25';
+
+  dugmeler.forEach((dugme) => {
+    dugme.addEventListener('click', () => {
+      const palet = dugme.dataset.palet;
+
+      dugmeler.forEach((d) => {
+        const etkin = d === dugme;
+        d.setAttribute('aria-pressed', String(etkin));
+        (etkin ? bos : secili).split(' ').forEach((s) => d.classList.remove(s));
+        (etkin ? secili : bos).split(' ').forEach((s) => d.classList.add(s));
+      });
+
+      bloklar.forEach((b) => b.classList.toggle('hidden', b.dataset.blok !== palet));
+    });
+  });
+})();
+</script>
+{% endblock %}

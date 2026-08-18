@@ -1,79 +1,110 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ebru AI - Proje Ekibi</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=20260814-2">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
+{% extends "taban.html" %}
+{% set sayfa = 'proje_ekibi' %}
 
-    <!-- YENİ HEADER (Giriş Yap Butonu Yok) -->
-    <header id="mainHeader">
-        <div class="logo">Ebru<span>.AI</span></div>
-        <nav>
-            <ul>
-                <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
-                <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
-                <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
-                <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
-                <li><a href="{{ url_for('proje_ekibi') }}" class="active">Hakkımızda</a></li>
-            </ul>
-        </nav>
-    </header>
+{% block baslik %}Ebru AI — Proje Ekibi{% endblock %}
+{% block aciklama %}Ebru AI projesini geliştiren ekip.{% endblock %}
 
-    <div class="content-section">
-        <h2 class="page-title">Proje <span class="gradient-text">Ekibi</span></h2>
-        <p class="page-subtitle">Bu şaheseri hayata geçiren çekirdek kadro.</p>
-        
-        <div class="grid-container">
-            
-            <!-- 1. GELİŞTİRİCİ (SEN) -->
-            <div class="card">
-                <div class="team-avatar">
-                    <i class="fas fa-laptop-code"></i>
-                </div>
-                <h3>Senin Adın</h3>
-                <p>AI & Backend Developer</p>
-                <div class="social-links">
-                    <a href="https://github.com/SENIN_GITHUB_ADIN" target="_blank"><i class="fab fa-github"></i></a>
-                    <a href="https://linkedin.com/in/SENIN_LINKEDIN_ADIN" target="_blank"><i class="fab fa-linkedin"></i></a>
-                </div>
+{% block icerik %}
+
+{# ------------------------------------------------------------------
+   EKİP LİSTESİ — düzenlenecek tek yer burası.
+   Her satır: (ad, görev, github kullanıcı adı ya da '', linkedin ya da '')
+   Adı boş bırakılan kart sayfada gösterilmiyor; yanlış bir isim
+   yayında kalmasın diye böyle yapıldı.
+   ------------------------------------------------------------------ #}
+{% set ekip = [
+  ('', 'Yapay zekâ ve arka uç', 'enestum2', ''),
+  ('', 'Ön yüz ve veri seti', '', ''),
+  ('', 'Akademik danışman', '', '')
+] %}
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="flex flex-col gap-sm max-w-3xl ac gorundu">
+    <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Ekip</span>
+    <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">Proje ekibi</h1>
+    <p class="font-body-lg text-body-lg text-on-surface-variant">
+      Ebru AI bir TÜBİTAK projesi olarak geliştirildi: veri seti hazırlandı,
+      model eğitildi, sunucu ve mobil uygulama yazıldı.
+    </p>
+  </div>
+</section>
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-md">
+  {% set gosterilecek = ekip | selectattr('0') | list %}
+
+  {% if gosterilecek %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-md">
+      {% for ad, gorev, github, linkedin in gosterilecek %}
+        <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-md
+                    hover:border-gold/30 transition-colors flex flex-col items-center text-center gap-xs ac ac-{{ loop.index }}">
+          <div class="w-20 h-20 rounded-full bg-gold/15 ring-1 ring-gold/40 flex items-center justify-center mb-xs">
+            <span class="font-headline-md text-headline-md text-gold">{{ ad[0] | upper }}</span>
+          </div>
+          <h2 class="font-headline-sm text-headline-sm text-on-surface">{{ ad }}</h2>
+          <p class="font-label-md text-label-md text-on-surface-variant">{{ gorev }}</p>
+
+          {% if github or linkedin %}
+            <div class="flex gap-sm mt-xs">
+              {% if github %}
+                <a href="https://github.com/{{ github }}" target="_blank" rel="noopener"
+                   class="font-label-sm text-label-sm text-tertiary hover:text-tertiary-fixed">GitHub</a>
+              {% endif %}
+              {% if linkedin %}
+                <a href="https://linkedin.com/in/{{ linkedin }}" target="_blank" rel="noopener"
+                   class="font-label-sm text-label-sm text-tertiary hover:text-tertiary-fixed">LinkedIn</a>
+              {% endif %}
             </div>
-
-            <!-- 2. GELİŞTİRİCİ (TAKIM ARKADAŞIN) -->
-            <div class="card">
-                <div class="team-avatar">
-                    <i class="fas fa-code-branch"></i>
-                </div>
-                <h3>Arkadaşının Adı</h3>
-                <p>Frontend & Veri Seti Uzmanı</p>
-                <div class="social-links">
-                    <a href="#" target="_blank"><i class="fab fa-github"></i></a>
-                    <a href="#" target="_blank"><i class="fab fa-linkedin"></i></a>
-                </div>
-            </div>
-
-            <!-- 3. DANIŞMAN HOCA -->
-            <div class="card">
-                <div class="team-avatar">
-                    <i class="fas fa-user-tie"></i>
-                </div>
-                <h3>Danışman Hocanızın Adı</h3>
-                <p>Akademik Danışman</p>
-                <div class="social-links">
-                    
-                </div>
-            </div>
-
+          {% endif %}
         </div>
+      {% endfor %}
     </div>
+  {% else %}
+    <div class="rounded-xl bg-surface-container-low border border-white/10 p-md flex gap-sm ac">
+      <span class="material-symbols-outlined text-gold shrink-0">edit_note</span>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Ekip bilgileri henüz eklenmedi. Adlar
+        <code class="text-on-surface">templates/proje_ekibi.html</code> dosyasının
+        başındaki listeye yazılınca kartlar burada görünür.
+      </p>
+    </div>
+  {% endif %}
+</section>
 
-    <footer>
-        <p>&copy; 2026 Ebru AI - TÜBİTAK Projesi - Tüm Hakları Saklıdır.</p>
-    </footer>
+<!-- ==============================================================
+     PROJE KÜNYESİ
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-lg">
+  <div class="flex items-center gap-base mb-md ac">
+    <span class="font-display-lg text-display-lg-mobile text-surface-variant leading-none">01</span>
+    <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest">Proje künyesi</h2>
+  </div>
 
-</body>
-</html>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-sm">
+    {% for etiket, deger in [
+      ('Veri seti', 'Ekibin hazırladığı 95 ebru görseli (1024×1024)'),
+      ('Model', 'SDXL 1.0 üzerine eğitilmiş ebru LoRA'),
+      ('Uygulama', 'Flutter · Android'),
+      ('Sunucu', 'Flask · kendi ekran kartımız')
+    ] %}
+      <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-sm ac">
+        <div class="font-label-sm text-label-sm text-outline uppercase tracking-widest">{{ etiket }}</div>
+        <div class="font-body-md text-body-md text-on-surface mt-xs">{{ deger }}</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="flex flex-wrap gap-sm mt-md ac">
+    <a href="https://github.com/enestum2/Ebru-AI" target="_blank" rel="noopener"
+       class="px-md py-sm rounded-full bg-surface-container hover:bg-surface-container-high
+              text-on-surface font-label-md text-label-md transition-colors flex items-center gap-xs">
+      <span class="material-symbols-outlined text-[20px]">code</span> Kaynak kod
+    </a>
+    <a href="https://huggingface.co/enestum2/ebru-lora-sdxl" target="_blank" rel="noopener"
+       class="px-md py-sm rounded-full bg-surface-container hover:bg-surface-container-high
+              text-on-surface font-label-md text-label-md transition-colors flex items-center gap-xs">
+      <span class="material-symbols-outlined text-[20px]">model_training</span> Model kartı
+    </a>
+  </div>
+</section>
+
+{% endblock %}

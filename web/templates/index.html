@@ -1,113 +1,342 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ebru AI - Ana Sayfa</title>
-    
-    <!-- CSS BAĞLANTILARI BURADA (SİLİNMEMESİ GEREKEN KISIM) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='hesap.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body class="home-page-body">
+{% extends "taban.html" %}
+{% set sayfa = 'home' %}
 
-    <!-- MENÜ KISMI (HAKKIMIZDA SİLİNMİŞ, TEMİZ HALİ) -->
-    <header id="mainHeader">
-        <div class="logo">Ebru<span>.AI</span></div>
-        <nav>
-            <ul>
-                <li><a href="{{ url_for('home') }}" class="active">Anasayfa</a></li>
-                <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
-                <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
-                <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
-            </ul>
-        </nav>
-    </header>
+{% block baslik %}Ebru AI — Yapay zekâ ile ebru sanatı{% endblock %}
+{% block aciklama %}Renk paletini ve deseni seç, kendi ebru eserini üret. Kendi eğittiğimiz SDXL modeliyle çalışır.{% endblock %}
 
-    <section class="hero">
-        <div class="hero-text">
-            <div class="hero-badge">✨ SDXL Teknolojisi ile Güçlendirildi</div>
-            <h1>
-                Geleneksel Sanat,<br>
-                <span class="gradient-text">Yapay Zeka</span><br>
-                ile Buluşuyor
-            </h1>
-            <p>Suyun üzerindeki dansı dijital dünyaya taşıdık. Hayalinizdeki Ebru eserini saniyeler içinde oluşturun.</p>
-            <button class="primary-btn" onclick="document.getElementById('generator').scrollIntoView({behavior: 'smooth'})">Hemen Üretmeye Başla</button>
+{% block icerik %}
+
+<!-- ==============================================================
+     GİRİŞ — öne çıkan eser
+     ============================================================== -->
+<section class="relative w-full min-h-[76vh] flex items-end overflow-hidden">
+  <div class="absolute inset-0">
+    <img src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt=""
+         class="w-full h-full object-cover opacity-45 scale-105">
+    <div class="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-background/30"></div>
+  </div>
+
+  <div class="relative z-10 w-full max-w-container-max mx-auto px-md md:px-lg pb-lg pt-xl">
+    <div class="flex flex-col items-start gap-md max-w-3xl ac gorundu">
+      <span class="flex items-center gap-xs font-label-md text-label-md text-tertiary uppercase tracking-widest">
+        <span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(137,213,193,0.8)] animate-pulse"></span>
+        Öne çıkan eser
+      </span>
+
+      <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
+        Suyun üzerindeki dans,<br>
+        <span class="text-gold">dijitalde</span>
+      </h1>
+
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
+        Ebru, boyanın su üstünde kendi akışıyla desen kurduğu bir sanat.
+        Biz de bu akışı kendi eğittiğimiz modele öğrettik: renk paletini ve deseni
+        seç, gerisini yapay zekâ tamamlasın.
+      </p>
+
+      <div class="flex flex-wrap gap-sm mt-xs">
+        <a href="#olustur"
+           class="altin-dugme px-md py-sm rounded-full font-label-md text-label-md uppercase tracking-wider flex items-center gap-xs">
+          <span class="material-symbols-outlined text-[20px] relative z-10">auto_awesome</span>
+          <span class="relative z-10">Ebruyu oluştur</span>
+        </a>
+        <a href="{{ url_for('ornekler') }}"
+           class="px-md py-sm rounded-full bg-surface-container hover:bg-surface-container-high
+                  text-on-surface font-label-md text-label-md uppercase tracking-wider
+                  transition-colors flex items-center gap-xs">
+          <span class="material-symbols-outlined text-[20px]">gallery_thumbnail</span>
+          Galeriyi gez
+        </a>
+      </div>
+
+      <div class="flex flex-wrap gap-md mt-md text-label-sm font-label-sm text-on-surface-variant">
+        <span class="flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gold">palette</span> 9 renk paleti</span>
+        <span class="flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gold">waves</span> 6 geleneksel desen</span>
+        <span class="flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gold">bolt</span> ~95 saniyede sonuç</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     OLUŞTUR — mobil uygulamanın "Oluştur" ekranının web karşılığı
+     ============================================================== -->
+<section id="olustur" class="w-full max-w-container-max mx-auto px-md md:px-lg py-xl">
+
+  <div class="flex flex-col items-center text-center gap-sm mb-lg ac">
+    <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">Atölye</span>
+    <h2 class="font-headline-md text-headline-md md:text-display-lg-mobile text-on-surface">
+      Bugün nasıl bir ebru istiyorsun?
+    </h2>
+    <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+      Renk ve deseni seç — örnekler nasıl bir sonuç çıkacağını gösteriyor.
+      Bütün örnekler gerçek üretimlerden alındı, temsilî çizim değil.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-md items-start">
+
+    <!-- ---------------- Sol: seçimler ---------------- -->
+    <div class="lg:col-span-7 flex flex-col gap-lg">
+
+      <!-- 1. Renk paleti -->
+      <div class="ac ac-1">
+        <div class="flex items-baseline justify-between mb-sm">
+          <h3 class="flex items-center gap-base font-label-md text-label-md text-on-surface uppercase tracking-widest">
+            <span class="text-tertiary">1</span> Renk paleti
+          </h3>
+          <span id="paletAciklama" class="font-label-sm text-label-sm text-gold"></span>
         </div>
 
-        <div class="hero-image">
-            <!-- ======================================================== -->
-            <!-- 4. SORUN ÇÖZÜMÜ: SİYAH SAYFAYLA SİLİNEN YENİ YAPI -->
-            <!-- ======================================================== -->
-            <div class="hero-image-container">
-                <!-- 1. En Alttaki Resim (Hover yapılınca görünecek) -->
-                <img class="img-back" src="{{ url_for('static', filename='images/uretim-gul-osmanli.jpg') }}" alt="Osmanlı paletinde üretilmiş gül">
-                
-                <!-- 2. Geçişi sağlayan Siyah Sayfa -->
-                <div class="black-page"></div>
+        <!-- Uygulamada palet satiri yatay kayiyor; genis ekranda kaydirmak
+             yerine sarmak daha iyi calisiyor, son kart kirpilmiyor. -->
+        <div id="paletListesi" class="flex flex-wrap gap-md pb-sm px-xs"></div>
+      </div>
 
-                <!-- 3. En Üstteki Resim (Site açılınca ilk görünen) -->
-                <img class="img-front" src="{{ url_for('static', filename='images/uretim-saf-ebru.jpg') }}" alt="Kırmızı ve krem tonlarında saf ebru">
+      <!-- 2. Desen -->
+      <div class="ac ac-2">
+        <h3 class="flex items-center gap-base font-label-md text-label-md text-on-surface uppercase tracking-widest mb-sm">
+          <span class="text-tertiary">2</span> Desen
+        </h3>
+        <div id="desenListesi" class="grid grid-cols-1 sm:grid-cols-2 gap-sm"></div>
+      </div>
 
-                <!-- 4. Sürekli hareket eden sinematik gölge efekti -->
-                <div class="moving-shadow-layer"></div>
-            </div>
-        </div>
-    </section>
-
-    <section class="generator-container" id="generator">
-        <div class="controls">
-            <h2>Eserini Tasarla</h2>
-            <p>Aklınızdaki sahneyi Türkçe olarak detaylıca tarif edin.</p>
-            
-            <textarea id="promptInput" placeholder="Örn: Galata kulesi etrafında uçuşan martılar, lale motifleri..."></textarea>
-            
-            <div class="settings-info">
-                <small><i class="fas fa-robot"></i> Model: SDXL Ebru v1 &nbsp;&nbsp;|&nbsp;&nbsp; <i class="fas fa-expand"></i> 1024x1024</small>
-            </div>
-
-            <button id="generateBtn" onclick="resimUret()">ESERİ OLUŞTUR</button>
+      <!-- 3. Desen yoğunluğu -->
+      <div class="ac ac-3">
+        <div class="flex items-baseline justify-between mb-xs">
+          <h3 class="flex items-center gap-base font-label-md text-label-md text-on-surface uppercase tracking-widest">
+            <span class="text-tertiary">3</span> Desen yoğunluğu
+          </h3>
+          <span id="yogunlukEtiket" class="font-label-sm text-label-sm text-gold">Dengeli</span>
         </div>
 
-        <div class="preview-area">
-            <div id="placeholderBox" style="text-align: center; color: #555;">
-                <i class="fas fa-palette" style="font-size: 3rem; margin-bottom: 10px;"></i>
-                <div style="font-weight: 600;">Eseriniz Burada Görüntülenecek</div>
-            </div>
+        <input id="yogunluk" class="ebru-kaydirici" type="range" min="0" max="100" step="5" value="50"
+               aria-label="Desen yoğunluğu">
 
-            <div id="loadingSpinner" class="hidden" style="text-align: center;">
-                <div class="spinner"></div>
-                <p style="color: #888; margin-top: 15px;">Sanatçı fırçalarını hazırlıyor...</p>
-            </div>
-
-            <img id="resultImage" class="hidden" src="" alt="Yapay Zeka Ebru">
-            
-            <button id="downloadBtn" class="hidden"><i class="fas fa-download"></i> İndir</button>
+        <div class="flex justify-between font-label-sm text-label-sm text-outline">
+          <span>Nesneler net</span>
+          <span>Ebru dokusu baskın</span>
         </div>
-    </section>
+      </div>
 
-    <!-- ÖZEL UYARI MODALI -->
-    <div id="customWarningModal" class="custom-modal hidden">
-        <div class="modal-overlay"></div>
-        <div class="modal-content">
-            <div class="modal-icon"><i class="fas fa-exclamation-triangle"></i></div>
-            <h3 class="gradient-text" style="animation: textFlow 3s linear infinite;">Üretim Devam Ediyor!</h3>
-            <p>Eseriniz şu an yapay zeka tarafından çiziliyor. Sayfadan ayrılırsanız işlem iptal olacaktır. Çıkmak istediğinize emin misiniz?</p>
-            <div class="modal-buttons">
-                <button id="modalStayBtn" class="modal-btn-stay">Hayır, Bekle</button>
-                <button id="modalLeaveBtn" class="modal-btn-leave">Evet, Çık</button>
-            </div>
+      <!-- 4. Ek istek -->
+      <div class="ac ac-4">
+        <div class="flex items-baseline justify-between mb-sm">
+          <h3 class="flex items-center gap-base font-label-md text-label-md text-on-surface uppercase tracking-widest">
+            <span class="text-tertiary">4</span> Ek istek
+          </h3>
+          <span class="font-label-sm text-label-sm text-outline">isteğe bağlı</span>
         </div>
+
+        <textarea id="ekIstek" rows="3"
+                  class="w-full rounded-xl bg-surface-container-low border border-white/10
+                         focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                         px-sm py-sm font-body-md text-body-md text-on-surface
+                         placeholder:text-outline transition-colors resize-y"
+                  placeholder="Örn: dalgalı, koyu tonlarda — ya da bir nesne: araba, kuş, cami"></textarea>
+
+        <div class="flex gap-sm mt-sm p-sm rounded-lg bg-surface-container-low border border-white/10">
+          <span class="material-symbols-outlined text-gold text-[18px] shrink-0">lightbulb</span>
+          <p class="font-label-sm text-label-sm text-on-surface-variant leading-relaxed">
+            Somut bir nesne yazarsan (araba, kuş, cami) o nesne görselde yer alır;
+            rengi seçtiğin palete uyar. Yoğunluğu yükseltirsen nesnenin üstünde de
+            ebru dokusu belirir.
+          </p>
+        </div>
+      </div>
+
+      <!-- 5. En-boy oranı -->
+      <div class="ac ac-5">
+        <div class="flex items-baseline justify-between mb-sm">
+          <h3 class="flex items-center gap-base font-label-md text-label-md text-on-surface uppercase tracking-widest">
+            <span class="text-tertiary">5</span> En-boy oranı
+          </h3>
+          <span class="font-label-sm text-label-sm text-outline">duvar kağıdı için dikey</span>
+        </div>
+        <div id="oranListesi" class="flex gap-xs bg-surface-container rounded-lg p-xs"></div>
+      </div>
+
+      <!-- Üret -->
+      <div class="ac">
+        <div id="hataKutusu"
+             class="hidden mb-sm p-sm rounded-lg bg-error/10 border border-error/30
+                    font-label-md text-label-md text-error"></div>
+
+        <button id="uretDugmesi" type="button"
+                class="altin-dugme w-full py-sm rounded-full font-label-md text-label-md
+                       uppercase tracking-wider flex items-center justify-center gap-xs">
+          <span class="material-symbols-outlined text-[20px] relative z-10">auto_awesome</span>
+          <span class="dugme-metin relative z-10">Ebruyu oluştur</span>
+        </button>
+
+        <p class="mt-sm text-center font-label-sm text-label-sm text-outline">
+          Üretim kendi ekran kartımızda yapılıyor ve yaklaşık 95 saniye sürüyor.
+          Sayfayı yenilersen üretim kaybolmaz, kaldığı yerden izlenir.
+        </p>
+      </div>
     </div>
 
-    <footer>
-        
-    </footer>
+    <!-- ---------------- Sağ: önizleme / sonuç ---------------- -->
+    <div class="lg:col-span-5 lg:sticky lg:top-[104px] ac ac-2">
+      <div class="rounded-xl bg-surface-container-lowest border border-white/5 shadow-2xl p-md relative overflow-hidden">
+        <div class="absolute -top-20 -right-20 w-64 h-64 bg-tertiary/10 rounded-full blur-[80px] pointer-events-none"></div>
 
-    <script src="{{ url_for('static', filename='hesap.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-</body>
-</html>
+        <div class="relative z-10 flex items-center justify-between mb-sm">
+          <span class="font-label-md text-label-md text-on-surface uppercase tracking-widest">Eserin</span>
+          <span class="font-label-sm text-label-sm text-outline">SDXL · ebru LoRA</span>
+        </div>
+
+        <!-- Boş durum -->
+        <div id="bosluk" class="relative z-10 aspect-[704/1024] rounded-lg bg-surface-container
+                                border border-dashed border-white/10 flex flex-col items-center
+                                justify-center gap-sm text-center px-md">
+          <span class="material-symbols-outlined text-[42px] text-outline">palette</span>
+          <p class="font-body-md text-body-md text-on-surface-variant">Eserin burada belirecek</p>
+          <p class="font-label-sm text-label-sm text-outline">
+            Seçimlerini yap, "Ebruyu oluştur"a bas.
+          </p>
+        </div>
+
+        <!-- Üretiliyor -->
+        <!-- "hidden" Tailwind'de display yardımcılarının en sonunda tanımlı,
+             bu yüzden "flex" ile birlikte yazıldığında gizleme kazanıyor;
+             JS "hidden" sınıfını kaldırınca kutu flex olarak açılıyor. -->
+        <div id="yukleniyor" class="hidden relative z-10 aspect-[704/1024] rounded-lg bg-surface-container
+                                    flex flex-col items-center justify-center gap-md px-md">
+          <div class="damla">
+            <span></span><span></span><span></span><span></span>
+            <span class="cekirdek"></span>
+          </div>
+
+          <p id="ilerlemeMetin" class="font-body-md text-body-md text-on-surface text-center">
+            Boyalar suya damlatılıyor...
+          </p>
+
+          <div class="w-full max-w-xs">
+            <div class="h-1 w-full bg-surface-container-high rounded-full overflow-hidden">
+              <div id="ilerlemeDolgu" class="ilerleme-dolgu h-full w-[2%] rounded-full"></div>
+            </div>
+            <div class="flex justify-between mt-xs font-label-sm text-label-sm text-outline">
+              <span>Üretiliyor</span>
+              <span id="ilerlemeOran"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sonuç -->
+        <div id="sonuc" class="hidden relative z-10">
+          <div class="rounded-lg overflow-hidden bg-black">
+            <img id="sonucGorsel" src="" alt="Üretilen ebru eseri" class="w-full h-auto block">
+          </div>
+
+          <dl class="grid grid-cols-2 gap-x-md gap-y-sm mt-md font-label-sm text-label-sm">
+            <div><dt class="text-outline">Palet</dt><dd id="sonucPalet" class="text-on-surface"></dd></div>
+            <div><dt class="text-outline">Desen</dt><dd id="sonucDesen" class="text-on-surface"></dd></div>
+            <div><dt class="text-outline">Yoğunluk</dt><dd id="sonucYogunluk" class="text-on-surface"></dd></div>
+            <div><dt class="text-outline">Boyut</dt><dd id="sonucBoyut" class="text-on-surface"></dd></div>
+            <div class="col-span-2"><dt class="text-outline">Seed</dt><dd id="sonucSeed" class="text-on-surface"></dd></div>
+          </dl>
+
+          <div class="flex flex-col gap-sm mt-md">
+            <button id="indirDugmesi" type="button"
+                    class="w-full py-sm rounded-full bg-tertiary hover:bg-tertiary-fixed text-on-tertiary
+                           font-label-md text-label-md transition-colors flex items-center justify-center gap-xs
+                           shadow-[0_0_18px_rgba(137,213,193,0.25)] hover:shadow-[0_0_28px_rgba(137,213,193,0.45)]">
+              <span class="material-symbols-outlined text-[20px]">download</span> İndir
+            </button>
+
+            <div class="flex gap-sm">
+              <button id="benzerDugmesi" type="button"
+                      class="flex-1 py-sm rounded-full border border-white/20 text-on-surface
+                             hover:border-gold/60 hover:text-gold font-label-md text-label-md transition-colors">
+                Benzerini üret
+              </button>
+              <button id="yeniDugmesi" type="button"
+                      class="flex-1 py-sm rounded-full border border-white/20 text-on-surface
+                             hover:border-gold/60 hover:text-gold font-label-md text-label-md transition-colors">
+                Yeni eser
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     ŞERİT — gerçek üretimlerden akan galeri
+     ============================================================== -->
+<section class="w-full py-lg border-y border-outline-variant/10 bg-surface-container-lowest/40 overflow-hidden ac">
+  <div class="max-w-container-max mx-auto px-md md:px-lg mb-md flex items-end justify-between">
+    <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest">Model çıktıları</h2>
+    <a href="{{ url_for('ornekler') }}" class="font-label-md text-label-md text-tertiary hover:text-tertiary-fixed flex items-center gap-xs">
+      Tümünü gör <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+    </a>
+  </div>
+
+  <div class="serit-kap w-full overflow-hidden">
+    <div class="serit gap-md">
+      {% for tur in [1, 2] %}
+        {% for gorsel, ad in [
+          ('uretim-saf-ebru.jpg', 'Saf ebru'),
+          ('uretim-gul-osmanli.jpg', 'Gül · Osmanlı'),
+          ('uretim-kedi-gece.jpg', 'Kedi · Gece'),
+          ('uretim-lavanta-pastel.jpg', 'Lavanta · Pastel'),
+          ('galeri-zumrut.jpg', 'Zümrüt'),
+          ('galeri-okyanus.jpg', 'Okyanus'),
+          ('galeri-lale.jpg', 'Lale'),
+          ('galeri-gece.jpg', 'Gece')
+        ] %}
+          <figure class="eser-kart relative w-56 h-72 shrink-0 rounded-lg overflow-hidden bg-surface-container ml-md"
+                  {% if tur == 2 %}aria-hidden="true"{% endif %}>
+            <img src="{{ url_for('static', filename='images/' + gorsel) }}" alt="{{ ad }}"
+                 class="w-full h-full object-cover" loading="lazy">
+            <figcaption class="eser-bilgi absolute inset-x-0 bottom-0 p-sm
+                               bg-gradient-to-t from-surface-dim to-transparent
+                               font-label-md text-label-md text-on-surface">{{ ad }}</figcaption>
+          </figure>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     UYGULAMA
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-xl">
+  <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-md md:p-lg
+              flex flex-col md:flex-row items-center gap-lg ac">
+    <div class="flex-1 flex flex-col gap-sm">
+      <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">Android</span>
+      <h2 class="font-headline-md text-headline-md text-on-surface">Eserini duvar kağıdı yap</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant max-w-xl">
+        Mobil uygulamada ürettiğin eseri tek dokunuşla kilit ekranına ya da ana ekrana
+        uygulayabilir, kişisel galerinde saklayabilirsin. Site ve uygulama aynı hesabı kullanır.
+      </p>
+      <a href="{{ url_for('indir_sayfasi') }}"
+         class="self-start mt-xs px-md py-sm rounded-full bg-surface-container hover:bg-surface-container-high
+                text-on-surface font-label-md text-label-md transition-colors flex items-center gap-xs">
+        <span class="material-symbols-outlined text-[20px]">android</span> Uygulamayı indir
+      </a>
+    </div>
+
+    <div class="w-44 shrink-0">
+      <div class="rounded-[28px] bg-surface-container-highest p-[5px] shadow-2xl rotate-3
+                  hover:rotate-0 transition-transform duration-700">
+        <div class="rounded-[24px] overflow-hidden bg-black aspect-[9/19.5] relative">
+          <img src="{{ url_for('static', filename='images/uretim-lavanta-pastel.jpg') }}" alt=""
+               class="w-full h-full object-cover">
+          <div class="absolute top-2 left-1/2 -translate-x-1/2 w-1/3 h-4 bg-black rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block ek_js %}
+<script src="{{ url_for('static', filename='js/uretim.js') }}?v=3"></script>
+{% endblock %}

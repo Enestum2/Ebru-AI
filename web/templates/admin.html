@@ -1,115 +1,94 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ebru AI — İzleme</title>
-  <style>
-    :root {
-      --bg: #f6f7f9;
-      --kart: #ffffff;
-      --cizgi: #e2e5ea;
-      --metin: #1c1f24;
-      --soluk: #6b7280;
-      --iyi: #147a3d;
-      --kotu: #b3261e;
-      --vurgu: #3f51b5;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #14161a;
-        --kart: #1d2025;
-        --cizgi: #2c3037;
-        --metin: #e8eaed;
-        --soluk: #9aa1ab;
-        --iyi: #5fd08a;
-        --kotu: #f2837a;
-        --vurgu: #8c9eff;
-      }
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 20px;
-      background: var(--bg); color: var(--metin);
-      font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    h1 { font-size: 20px; margin: 0 0 4px; }
-    .alt { color: var(--soluk); font-size: 13px; margin-bottom: 18px; }
-    .kutular {
-      display: grid; gap: 12px; margin-bottom: 22px;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    }
-    .kutu {
-      background: var(--kart); border: 1px solid var(--cizgi);
-      border-radius: 10px; padding: 14px;
-    }
-    .kutu .sayi { font-size: 26px; font-weight: 600; }
-    .kutu .etiket { color: var(--soluk); font-size: 12px; }
-    h2 { font-size: 15px; margin: 22px 0 10px; }
-    .sarmal { overflow-x: auto; }
-    table {
-      width: 100%; border-collapse: collapse;
-      background: var(--kart); border: 1px solid var(--cizgi);
-      border-radius: 10px; overflow: hidden; font-size: 13px;
-    }
-    th, td {
-      text-align: left; padding: 9px 11px;
-      border-bottom: 1px solid var(--cizgi); white-space: nowrap;
-    }
-    th { color: var(--soluk); font-weight: 600; font-size: 12px; }
-    tr:last-child td { border-bottom: none; }
-    td.prompt { white-space: normal; min-width: 240px; }
-    .ok { color: var(--iyi); font-weight: 600; }
-    .hata { color: var(--kotu); font-weight: 600; }
-    .bos { color: var(--soluk); padding: 18px; text-align: center; }
-    .yenile { color: var(--soluk); font-size: 12px; margin-top: 14px; }
-    /* Mobil uygulamayla ortak yönetim görünümü. */
-    :root { --bg:#101418; --kart:#00142c; --cizgi:rgba(212,227,255,.14); --metin:#f4f0e8; --soluk:#c5c6ca; --iyi:#89d5c1; --kotu:#ffb4ab; --vurgu:#c7a65a; }
-    body { font-family:Inter,system-ui,sans-serif; }
-    h1,h2 { font-family:'Playfair Display',Georgia,serif; }
-  </style>
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=20260814-2">
-</head>
-<body>
-  <h1>Ebru AI — İzleme Paneli</h1>
-  <div class="alt" id="durum">Yükleniyor…</div>
+{% extends "taban.html" %}
+{% set sayfa = 'admin' %}
 
-  <div class="kutular">
-    <div class="kutu"><div class="sayi" id="toplam">–</div><div class="etiket">Toplam istek</div></div>
-    <div class="kutu"><div class="sayi ok" id="basarili">–</div><div class="etiket">Başarılı</div></div>
-    <div class="kutu"><div class="sayi hata" id="hatali">–</div><div class="etiket">Hatalı</div></div>
-    <div class="kutu"><div class="sayi" id="kuyruk">–</div><div class="etiket">Kuyrukta</div></div>
-    <div class="kutu"><div class="sayi" id="cihazsayi">–</div><div class="etiket">Bugünkü cihaz</div></div>
+{% block baslik %}Ebru AI — İzleme Paneli{% endblock %}
+
+{% block icerik %}
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-lg">
+
+  <div class="flex flex-col md:flex-row md:items-end justify-between gap-sm mb-md">
+    <div class="flex flex-col gap-xs">
+      <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Yönetim</span>
+      <h1 class="font-headline-md text-headline-md text-on-surface">İzleme paneli</h1>
+      <p id="durum" class="font-label-sm text-label-sm text-on-surface-variant">Yükleniyor…</p>
+    </div>
+
+    <div class="flex items-center gap-xs font-label-sm text-label-sm text-outline">
+      <span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+      5 saniyede bir yenilenir
+    </div>
   </div>
 
-  <h2>Bugün üretim yapan cihazlar</h2>
-  <div class="sarmal"><table id="cihazlar"></table></div>
+  <!-- Sayaçlar -->
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-sm mb-lg">
+    {% for id, etiket, renk in [
+      ('toplam',    'Toplam istek',   'text-on-surface'),
+      ('basarili',  'Başarılı',       'text-tertiary'),
+      ('hatali',    'Hatalı',         'text-error'),
+      ('kuyruk',    'Kuyrukta',       'text-gold'),
+      ('cihazsayi', 'Bugünkü cihaz',  'text-on-surface')
+    ] %}
+      <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-sm">
+        <div id="{{ id }}" class="font-display-lg text-display-lg-mobile {{ renk }} leading-none">–</div>
+        <div class="font-label-sm text-label-sm text-outline uppercase tracking-widest mt-xs">{{ etiket }}</div>
+      </div>
+    {% endfor %}
+  </div>
 
-  <h2>Son istekler</h2>
-  <div class="sarmal"><table id="istekler"></table></div>
+  <!-- Cihazlar -->
+  <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest mb-sm">
+    Bugün üretim yapan hesaplar
+  </h2>
+  <div class="rounded-xl bg-surface-container-lowest border border-white/5 overflow-hidden mb-lg">
+    <div class="overflow-x-auto">
+      <table id="cihazlar" class="w-full text-left font-body-md text-body-md"></table>
+    </div>
+  </div>
 
-  <div class="yenile">5 saniyede bir otomatik yenilenir.</div>
+  <!-- İstekler -->
+  <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest mb-sm">
+    Son istekler
+  </h2>
+  <div class="rounded-xl bg-surface-container-lowest border border-white/5 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table id="istekler" class="w-full text-left font-body-md text-body-md"></table>
+    </div>
+  </div>
+</section>
 
+{% endblock %}
+
+{% block ek_js %}
 <script>
-// Sunucu bu değeri şablona basıyor (app.py: render_template("admin.html",
-// token=...)). Tanımı silinince aşağıdaki /stats isteği ReferenceError
-// veriyor ve panel hiç veri çekemiyordu.
+/* Sunucu bu değeri şablona basıyor (app.py: render_template("admin.html",
+   token=...)). Tanımı silinirse aşağıdaki /stats isteği ReferenceError
+   verir ve panel hiç veri çekemez. */
 const TOKEN = {{ token | tojson }};
+
+const HUCRE = 'px-sm py-xs border-b border-white/5 whitespace-nowrap';
+const BASLIK_HUCRE = 'px-sm py-xs border-b border-white/10 font-label-sm text-label-sm ' +
+                     'text-outline uppercase tracking-widest whitespace-nowrap';
 
 function saat(ts) {
   return new Date(ts * 1000).toLocaleTimeString('tr-TR');
 }
 
 function kacak(s) {
-  return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  return String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function bosSatir(sutun, metin) {
+  return '<tr><td class="px-sm py-md text-center text-outline" colspan="' + sutun + '">' +
+         metin + '</td></tr>';
 }
 
 async function yenile() {
   let veri;
   try {
-    const cevap = await fetch(`/stats?token=${encodeURIComponent(TOKEN)}`);
-    if (!cevap.ok) throw new Error('yetki veya sunucu hatası');
+    const cevap = await fetch('/stats?token=' + encodeURIComponent(TOKEN));
+    if (!cevap.ok) throw new Error('yetki ya da sunucu hatası');
     veri = await cevap.json();
   } catch (e) {
     document.getElementById('durum').textContent = 'Bağlanılamadı: ' + e.message;
@@ -117,7 +96,10 @@ async function yenile() {
   }
 
   document.getElementById('durum').textContent =
-    `Günlük limit: ${veri.gunluk_limit} · Aktif iş: ${veri.aktif_isler} · Son güncelleme ${new Date().toLocaleTimeString('tr-TR')}`;
+    'Günlük limit: ' + veri.gunluk_limit +
+    ' · Aktif iş: ' + veri.aktif_isler +
+    ' · Son güncelleme ' + new Date().toLocaleTimeString('tr-TR');
+
   document.getElementById('toplam').textContent = veri.sayaclar.toplam;
   document.getElementById('basarili').textContent = veri.sayaclar.basarili;
   document.getElementById('hatali').textContent = veri.sayaclar.hatali;
@@ -126,30 +108,40 @@ async function yenile() {
 
   const c = document.getElementById('cihazlar');
   if (!veri.cihazlar.length) {
-    c.innerHTML = '<tr><td class="bos">Bugün henüz üretim yok.</td></tr>';
+    c.innerHTML = bosSatir(2, 'Bugün henüz üretim yok.');
   } else {
-    c.innerHTML = '<tr><th>Cihaz / IP</th><th>Bugünkü üretim</th></tr>' +
-      veri.cihazlar.map(x =>
-        `<tr><td>${kacak(x.kimlik)}</td><td>${x.bugun} / ${veri.gunluk_limit}</td></tr>`
-      ).join('');
+    c.innerHTML =
+      '<tr><th class="' + BASLIK_HUCRE + '">Hesap / IP</th>' +
+      '<th class="' + BASLIK_HUCRE + '">Bugünkü üretim</th></tr>' +
+      veri.cihazlar.map((x) =>
+        '<tr class="hover:bg-surface-container-low transition-colors">' +
+        '<td class="' + HUCRE + ' text-on-surface">' + kacak(x.kimlik) + '</td>' +
+        '<td class="' + HUCRE + ' text-on-surface-variant">' + x.bugun + ' / ' + veri.gunluk_limit + '</td>' +
+        '</tr>').join('');
   }
 
   const t = document.getElementById('istekler');
   if (!veri.istekler.length) {
-    t.innerHTML = '<tr><td class="bos">Henüz istek yok.</td></tr>';
+    t.innerHTML = bosSatir(7, 'Henüz istek yok.');
   } else {
-    t.innerHTML = '<tr><th>Saat</th><th>Durum</th><th>Süre</th><th>Cihaz</th><th>IP</th><th>Kaynak</th><th>İstek</th></tr>' +
-      veri.istekler.map(x => {
+    t.innerHTML =
+      '<tr>' +
+      ['Saat', 'Durum', 'Süre', 'Hesap', 'IP', 'Kaynak', 'İstek']
+        .map((b) => '<th class="' + BASLIK_HUCRE + '">' + b + '</th>').join('') +
+      '</tr>' +
+      veri.istekler.map((x) => {
         const ok = x.durum === 'success';
-        return `<tr>
-          <td>${saat(x.zaman)}</td>
-          <td class="${ok ? 'ok' : 'hata'}">${ok ? 'başarılı' : 'hata'}</td>
-          <td>${x.sure} sn</td>
-          <td>${kacak(x.kimlik)}</td>
-          <td>${kacak(x.ip)}</td>
-          <td>${kacak(x.kaynak || '-')}</td>
-          <td class="prompt">${kacak(x.mesaj || x.prompt)}</td>
-        </tr>`;
+        return '<tr class="hover:bg-surface-container-low transition-colors">' +
+          '<td class="' + HUCRE + ' text-on-surface-variant">' + saat(x.zaman) + '</td>' +
+          '<td class="' + HUCRE + ' ' + (ok ? 'text-tertiary' : 'text-error') + '">' +
+            (ok ? 'başarılı' : 'hata') + '</td>' +
+          '<td class="' + HUCRE + ' text-on-surface-variant">' + x.sure + ' sn</td>' +
+          '<td class="' + HUCRE + ' text-on-surface">' + kacak(x.kimlik) + '</td>' +
+          '<td class="' + HUCRE + ' text-on-surface-variant">' + kacak(x.ip) + '</td>' +
+          '<td class="' + HUCRE + ' text-on-surface-variant">' + kacak(x.kaynak || '-') + '</td>' +
+          '<td class="px-sm py-xs border-b border-white/5 text-on-surface-variant min-w-[260px]">' +
+            kacak(x.mesaj || x.prompt) + '</td>' +
+        '</tr>';
       }).join('');
   }
 }
@@ -157,5 +149,4 @@ async function yenile() {
 yenile();
 setInterval(yenile, 5000);
 </script>
-</body>
-</html>
+{% endblock %}
