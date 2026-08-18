@@ -121,12 +121,16 @@ EbruHesap.yoneticiKontrol = async function () {
     kap.appendChild(bag);
   };
 
+  // Kimlikle seçiliyor: sınıf adında iki nokta olduğu için
+  // ("lg:flex") kaçış gerekiyordu ve JavaScript metni kaçışı yiyip
+  // geçersiz seçici üretiyordu; fonksiyon orada hata verip bağlantıyı
+  // hiç eklemiyordu.
   ekle(
-    document.querySelector('#ustBaslik nav.hidden.lg\:flex'),
+    document.getElementById('anaMenu'),
     'font-label-md text-label-md text-gold hover:text-ivory transition-colors'
   );
   ekle(
-    document.querySelector('#mobilMenu .flex.flex-col'),
+    document.getElementById('mobilMenuIcerik'),
     'py-sm font-label-md text-label-md text-gold hover:text-ivory transition-colors'
   );
 };
