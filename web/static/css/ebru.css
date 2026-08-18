@@ -173,7 +173,7 @@ input[type="range"].ebru-kaydirici {
 input[type="range"].ebru-kaydirici::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--gold) var(--dolu, 50%), #122b49 var(--dolu, 50%));
+  background: linear-gradient(to right, var(--gold) var(--dolu, 50%), #1e3654 var(--dolu, 50%));
 }
 input[type="range"].ebru-kaydirici::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -187,7 +187,7 @@ input[type="range"].ebru-kaydirici::-webkit-slider-thumb {
 }
 input[type="range"].ebru-kaydirici:hover::-webkit-slider-thumb { transform: scale(1.15); }
 input[type="range"].ebru-kaydirici::-moz-range-track {
-  height: 4px; border-radius: 999px; background: #122b49;
+  height: 4px; border-radius: 999px; background: #1e3654;
 }
 input[type="range"].ebru-kaydirici::-moz-range-progress {
   height: 4px; border-radius: 999px; background: var(--gold);
@@ -307,3 +307,53 @@ footer { margin-top: 8rem;
           -ms-layout-grid: var(--gold);
           scrollbar-color: var(--gold) var(--surface);
 }
+
+/* ------------------------------------------------------------------
+   Kaydiricinin uygulamadaki hali: 20 bolme (centikler) ve
+   suruklerken cikan deger balonu. Flutter'daki Slider
+   (divisions: 20, showValueIndicator) boyle davraniyor.
+   ------------------------------------------------------------------ */
+.kaydirici-kap { position: relative; padding-top: 26px; }
+
+.kaydirici-balon {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%) scale(0.85);
+  transform-origin: bottom center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #00142c;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.kaydirici-kap.etkin .kaydirici-balon { opacity: 1; transform: translateX(-50%) scale(1); }
+
+/* Balonun ucundaki ok */
+.kaydirici-balon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px; height: 8px;
+  background: var(--gold);
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 1px;
+}
+
+.kaydirici-centikler { position: absolute; left: 0; right: 0; top: 40px; height: 0; pointer-events: none; }
+
+.kaydirici-centik {
+  position: absolute;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.30);
+  transform: translate(-50%, -50%);
+}
+/* Dolu kisimdaki centikler altin izin uzerinde koyu duruyor. */
+.kaydirici-centik.dolu { background: rgba(0, 20, 44, 0.45); }

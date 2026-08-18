@@ -110,8 +110,14 @@
           <span id="yogunlukEtiket" class="font-label-sm text-label-sm text-gold">Dengeli</span>
         </div>
 
-        <input id="yogunluk" class="ebru-kaydirici" type="range" min="0" max="100" step="5" value="50"
-               aria-label="Desen yoğunluğu">
+        <!-- Uygulamadaki Slider'ın karşılığı: 20 bölme (çentikler),
+             altın dolu iz ve sürüklerken çıkan değer balonu. -->
+        <div class="kaydirici-kap">
+          <output id="yogunlukBalon" class="kaydirici-balon" for="yogunluk">%50</output>
+          <input id="yogunluk" class="ebru-kaydirici" type="range" min="0" max="100" step="5" value="50"
+                 aria-label="Desen yoğunluğu">
+          <div id="yogunlukCentik" class="kaydirici-centikler" aria-hidden="true"></div>
+        </div>
 
         <div class="flex justify-between font-label-sm text-label-sm text-outline">
           <span>Nesneler net</span>
@@ -158,6 +164,21 @@
 
       <!-- Üret -->
       <div class="ac">
+        <!-- Giriş yapılmadığında görünen uyarı; hesap.js dolduruyor.
+             Sunucu da giriş istiyor (POST /jobs → 401), bu yalnızca
+             kullanıcıyı boşuna bekletmemek için. -->
+        <div id="girisUyarisi"
+             class="hidden mb-sm p-sm rounded-lg bg-surface-container-low border border-gold/30
+                    flex items-center gap-sm">
+          <span class="material-symbols-outlined text-gold shrink-0">lock</span>
+          <p class="flex-1 font-label-md text-label-md text-on-surface-variant">
+            Eser üretmek için hesap gerekiyor — açmak ücretsiz, günde 3 üretim hakkı var.
+          </p>
+          <a href="/giris?devam=%2F%23olustur"
+             class="shrink-0 px-md py-xs rounded-full bg-gold/20 hover:bg-gold/30 text-gold
+                    font-label-md text-label-md transition-colors">Giriş yap</a>
+        </div>
+
         <div id="hataKutusu"
              class="hidden mb-sm p-sm rounded-lg bg-error/10 border border-error/30
                     font-label-md text-label-md text-error"></div>

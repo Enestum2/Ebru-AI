@@ -268,7 +268,7 @@ SAVE_IMAGES = os.environ.get("EBRU_SAVE_IMAGES", "1") == "1"
 
 MAX_QUEUE = int(os.environ.get("EBRU_MAX_QUEUE", "8"))
 QUEUE_TIMEOUT = int(os.environ.get("EBRU_QUEUE_TIMEOUT", "240"))
-DAILY_LIMIT = int(os.environ.get("EBRU_DAILY_LIMIT", "30"))
+DAILY_LIMIT = int(os.environ.get("EBRU_DAILY_LIMIT", "3"))
 MIN_INTERVAL = float(os.environ.get("EBRU_MIN_INTERVAL", "3"))
 
 _gpu_semaphore = threading.BoundedSemaphore(1)
@@ -363,6 +363,13 @@ def check_rate_limit(kimlik, kullanici=None):
         _usage[f"son:{kimlik}"] = simdi
 
     if kullanici:
+        # Yonetici gunluk haktan muaf: ornek uretmek ve prompt motorunu
+        # olcmek icin sinirsiz uretebilmesi gerekiyor. Art arda basmayi
+        # engelleyen MIN_INTERVAL ona da uygulaniyor (yukarida).
+        # ADMIN_KULLANICI asagida tanimli; calisma aninda cozuluyor.
+        if _yonetici_mi(kullanici.get("kullanici_adi")):
+            return True, None, None
+
         kullanilan = kullanicilar.gunluk_sayi(kullanici["id"])
         if kullanilan >= DAILY_LIMIT:
             return (
@@ -509,6 +516,40 @@ def get_lora_weight(user_text):
 # şeyin üstüne biniyor.
 INTENSITY_MIN_LORA = 0.30
 INTENSITY_MAX_LORA = 0.90
+
+# --- Nesne istendiğinde uygulanan düzeltmeler ---
+#
+# Ölçüm (18 Ağustos, aynı seed'le karşılaştırmalı): nesne istendiğinde
+# taç yapraklarda geniş beyaz alanlar çıkıyordu. Kaynağı paletin kendi
+# metnindeki beyaz vurgusuydu ("... and ivory white"); negatif prompt
+# tek başına onu yenemiyordu. Palet metninden beyaz vurgusu çıkarılınca
+# beyaz kayboldu, saf ebru üretimi ise etkilenmedi.
+NESNE_NEGATIF = (
+    "white petals, striped petals, two-tone flower, variegated tulip"
+)
+
+# Referanstaki hatip ebrusu motifi küçük ve ortada duruyor; nesne
+# istendiğinde kadrajı doldurmasın diye.
+NESNE_KOMPOZISYON = (
+    "(the motif small and centered, occupying only a third of the "
+    "frame, surrounded by a wide calm marbled field:1.2)"
+)
+
+# Beyazın vurgu olduğu paletlerde (osmanli, okyanus, pastel) çıkarılıyor;
+# beyazın paletin kendisi olduğu yerlerde (siyah-beyaz, mavi-beyaz…)
+# dokunulmuyor, yoksa palet anlamını kaybeder.
+_BEYAZ_VURGUSU = re.compile(
+    r"(,\s*|\s+and\s+)(ivory white|soft white|clean white|pure white|creams|cream)",
+    re.IGNORECASE,
+)
+
+
+def paletten_beyazi_cikar(anahtar, metin):
+    """Nesne istendiğinde paletteki beyaz vurgusunu düşürür."""
+    if "beyaz" in anahtar or "white" in anahtar:
+        return metin
+    return _BEYAZ_VURGUSU.sub("", metin)
+
 
 # Nesne istendiğinde üst sınır. 0.60'a kadar nesne net kalıyor,
 # üstüne çıkınca doku nesneyi yutmaya başlıyor.
@@ -724,8 +765,15 @@ OBJECT_PROMPTS = {
     "nazar boncuğu":
     "a traditional Turkish evil eye amulet, a circular blue glass bead with concentric blue and white rings",
 
+    # Ölçümle bulundu (18 Ağustos): "a classic tulip flower with
+    # elegant curved petals" natüralist, iri ve kırmızı-beyaz alacalı
+    # bir lale çıkarıyordu. Geleneksel hatip ebrusu lalesi tek renk,
+    # küçük ve sivri uçludur; tarif ona göre yazıldı.
     "lale":
-    "a classic tulip flower with elegant curved petals",
+    "a single small stylized Ottoman hatip ebru tulip motif, "
+    "solid deep red petals in one flat tone with a slender pointed "
+    "curled tip, no white markings, no stripes, no two-tone petals, "
+    "a thin curved dark green stem with long narrow pointed leaves",
 
     # --- ÇİÇEKLER ---
     # Sözlükte yalnızca genel "çiçek" ve "lale" vardı; kullanıcı "gül"
@@ -1297,15 +1345,19 @@ def palette_words(text):
 
 def object_keys(text):
     """
-    Metinde geçen nesne anahtarları. Palet olarak kullanılan
-    kelimeler hariç tutulur.
+    Metinde geçen nesne anahtarları.
+
+    Palet olarak yazılan kelime nesne sayılmaz — ama yalnızca
+    "<kelime> renklerinde" kalıbının GEÇTİĞİ YERDE. Eskiden kelime
+    metnin tamamından siliniyordu; bu yüzden Lale paletini seçip
+    ayrıca "lale" yazan kullanıcı laleyi hiç göremiyordu
+    ("lale renklerinde, battal deseninde, lale" → nesne yok).
+    Şimdi önce palet kalıpları metinden çıkarılıyor, nesne araması
+    kalan metinde yapılıyor.
     """
     text = text.lower()
-    paletler = palette_words(text)
-    return [
-        k for k in OBJECT_PROMPTS
-        if k not in paletler and word_match(k, text)
-    ]
+    kalan = _PALET_KALIBI.sub(" ", text)
+    return [k for k in OBJECT_PROMPTS if word_match(k, kalan)]
 
 
 def has_object(user_text):
@@ -1337,6 +1389,30 @@ def enrich_prompt(user_text):
             _sozlukler[kategori],
         )
 
+    # Bir kelime hem nesne hem palet olamaz. "lale" ikisinde de var:
+    # kullanıcı Osmanlı paletini seçip "lale" yazdığında prompt'a hem
+    # Osmanlı'nın hem lalenin renk tarifi giriyordu ve iki palet
+    # birbiriyle çelişiyordu. Palet olarak yazılan kelime zaten
+    # object_keys içinde nesne sayılmıyor; buradaki de tersi:
+    # nesne olarak yazılan kelime palet sayılmasın.
+    nesne_anahtarlari = set(eslesen["nesne"])
+    if nesne_anahtarlari:
+        # "<kelime> renklerinde" kalıbında geçen kelime her hâlükârda
+        # palet; kullanıcı onu ayrıca nesne olarak da yazmış olabilir
+        # (Lale paleti + "lale") ve o zaman ikisi de doğrudur.
+        # Yalnızca palet kalıbında GEÇMEYEN bir kelime nesne olarak
+        # yazıldıysa palet sayılmaz.
+        palet_kelimeleri = palette_words(text)
+        cakisan = [
+            k for k in eslesen["renk"]
+            if k in nesne_anahtarlari and k not in palet_kelimeleri
+        ]
+        if cakisan:
+            print(f"🎯 Nesne olarak yazıldı, palet sayılmadı: {cakisan}")
+        eslesen["renk"] = [
+            k for k in eslesen["renk"] if k not in cakisan
+        ]
+
     matched_keys = [k for liste in eslesen.values() for k in liste]
 
     # Kullanıcı somut bir nesne istediyse (araba, kuş, cami…) prompt
@@ -1364,7 +1440,10 @@ def enrich_prompt(user_text):
             prompt_parts.append(f"({STYLE_PROMPTS[key]}:1.2)")
 
     for key in eslesen["renk"]:
-        prompt_parts.append(COLOR_PROMPTS[key])
+        metin = COLOR_PROMPTS[key]
+        if nesne_var:
+            metin = paletten_beyazi_cikar(key, metin)
+        prompt_parts.append(metin)
 
     for key in eslesen["hareket"]:
         prompt_parts.append(ACTION_PROMPTS[key])
@@ -1378,6 +1457,9 @@ def enrich_prompt(user_text):
         print("⏩ Serbest metin yok, çeviri atlandı")
 
     prompt_parts.append(BASE_STYLE_SHORT if nesne_var else BASE_STYLE)
+
+    if nesne_var:
+        prompt_parts.append(NESNE_KOMPOZISYON)
 
     final_prompt = ", ".join(prompt_parts)
     print("\n✨ OLUŞAN PROMPT:")
@@ -1616,15 +1698,35 @@ def stats():
     })
 
 
+@app.route("/admin/kullanicilar", methods=["GET"])
+def admin_kullanicilar():
+    """Kayıtlı kullanıcılar ve kullanım sayıları (yönetim paneli)."""
+    if not _yonetici_yetkili():
+        return jsonify({"status": "error", "message": "Yetkisiz"}), 403
+
+    liste = kullanicilar.hepsi()
+    for k in liste:
+        k["yonetici"] = _yonetici_mi(k["kullanici_adi"])
+
+    return jsonify({
+        "status": "success",
+        "kullanicilar": liste,
+        "gunluk_limit": DAILY_LIMIT,
+    })
+
+
 @app.route("/admin", methods=["GET"])
 def admin():
-    """Tarayıcıdan bakılabilen basit izleme paneli."""
-    if not _yonetici_yetkili():
-        return (
-            "<h3>Yetkisiz</h3>"
-            "<p>Adresin sonuna ?token=KAYIT_ANAHTARIN ekle.</p>",
-            403,
-        )
+    """
+    Yönetim paneli.
+
+    Sayfanın kendisi yetki istemiyor: tarayıcı adres çubuğundan
+    gidilirken Authorization başlığı gönderilemiyor, oturum anahtarı
+    ise tarayıcıda saklı. Sayfa boş bir kabuk; bütün veriler
+    /stats, /admin/jobs ve /admin/kullanicilar uçlarından geliyor ve
+    o uçlar yönetici yetkisi istiyor. Yetkisiz biri sayfayı açsa da
+    hiçbir veri göremez.
+    """
     return render_template("admin.html", token=request.args.get("token", ""))
 
 
@@ -1971,7 +2073,10 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
             "prompt":
             final_prompt,
             "negative_prompt":
-            ADVANCED_NEGATIVE,
+            (
+                f"{ADVANCED_NEGATIVE}, {NESNE_NEGATIF}"
+                if nesne_var else ADVANCED_NEGATIVE
+            ),
             "steps":
             STEPS,
             "cfg_scale":
