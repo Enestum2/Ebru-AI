@@ -1,0 +1,442 @@
+/* Site üzerinden görsel üretimi.
+ *
+ * Akış mobil uygulamanın "Oluştur" ekranıyla aynı: palet, desen,
+ * desen yoğunluğu ve isteğe bağlı serbest metin seçiliyor; bunlar
+ * tek bir Türkçe prompt'a birleştirilip sunucuya gönderiliyor.
+ * Birleştirme kuralı uygulamadaki EbruViewModel.generateDesign ile
+ * birebir aynı olmak zorunda, yoksa aynı seçim iki yerde farklı
+ * sonuç verir.
+ *
+ * Üretim ~95 saniye sürdüğü için senkron /generate değil asenkron
+ * /jobs kullanılıyor: iş numarası alınıyor, sonra durumu sorgulanıyor.
+ * İş numarası tarayıcıda saklanıyor; sayfa yenilenirse üretim
+ * kaybolmuyor, kaldığı yerden izlenmeye devam ediyor.
+ */
+
+(function () {
+  'use strict';
+
+  const ONIZLEME = '/static/onizleme/';
+  const BEKLEYEN_IS = 'ebru_bekleyen_is';
+
+  /* Palet kimlikleri sunucudaki COLOR_PROMPTS anahtarlarıyla ve
+     uygulamadaki design_options.dart ile birebir aynı. */
+  const PALETLER = [
+    { id: 'osmanli',       ad: 'Osmanlı',      aciklama: 'Kızıl, altın ve fildişi' },
+    { id: 'zumrut',        ad: 'Zümrüt',       aciklama: 'Derin yeşil, altın damarlı' },
+    { id: 'okyanus',       ad: 'Okyanus',      aciklama: 'Mavi tonları ve beyaz köpük' },
+    { id: 'gece',          ad: 'Gece',         aciklama: 'Lacivert, gümüş ve mor' },
+    { id: 'lale',          ad: 'Lale',         aciklama: 'Gül pembesi ve kızıl' },
+    { id: 'pastel',        ad: 'Pastel',       aciklama: 'Yumuşak, soluk tonlar' },
+    { id: 'sari-kirmizi',  ad: 'Sarı-Kırmızı', aciklama: 'Altın sarısı ve derin kırmızı' },
+    { id: 'sari-lacivert', ad: 'Sarı-Lacivert', aciklama: 'Altın sarısı ve lacivert' },
+    { id: 'siyah-beyaz',   ad: 'Siyah-Beyaz',  aciklama: 'Yüksek kontrast, tek renk' },
+  ];
+
+  /* id doğrudan prompt'a giriyor ("<id> deseninde"), slug dosya adında. */
+  const DESENLER = [
+    { id: 'battal',        ad: 'Battal',        slug: 'battal',        aciklama: 'Serbest damlatılmış organik lekeler' },
+    { id: 'hatip',         ad: 'Hatip',         slug: 'hatip',         aciklama: 'Merkezî çiçek ve rozet motifi' },
+    { id: 'taraklı',       ad: 'Taraklı',       slug: 'tarakli',       aciklama: 'Tarakla çekilmiş düzenli dalgalar' },
+    { id: 'bülbül yuvası', ad: 'Bülbül yuvası', slug: 'bulbul_yuvasi', aciklama: 'İç içe sarmal girdaplar' },
+    { id: 'gelgit',        ad: 'Gelgit',        slug: 'gelgit',        aciklama: 'İleri geri çekilmiş S kıvrımları' },
+    { id: 'şal',           ad: 'Şal',           slug: 'sal',           aciklama: 'İç içe geçen tüy benzeri doku' },
+  ];
+
+  /* Sunucunun desteklediği çözünürlükler (app.py: SUPPORTED_SIZES).
+     Oran gönderiliyor, sunucu en yakın boyutu seçiyor. */
+  const ORANLAR = [
+    { ad: 'Dikey', oran: 704 / 1024, olcu: '704×1024' },
+    { ad: 'Kare',  oran: 1,          olcu: '768×768' },
+    { ad: 'Yatay', oran: 1024 / 704, olcu: '1024×704' },
+  ];
+
+  const durum = {
+    palet: 'osmanli',
+    desen: 'battal',
+    yogunluk: 50,
+    oran: ORANLAR[0].oran,
+    uretiliyor: false,
+  };
+
+  /* --------------------------------------------------------------
+     Yardımcılar
+     -------------------------------------------------------------- */
+  const $ = (id) => document.getElementById(id);
+
+  function yogunlukEtiketi(deger) {
+    if (deger < 30) return 'Çok hafif';
+    if (deger < 50) return 'Hafif';
+    if (deger < 70) return 'Dengeli';
+    if (deger < 88) return 'Yoğun';
+    return 'Çok yoğun';
+  }
+
+  function desenGorseli(desen, paletId) {
+    return ONIZLEME + 'desen_' + paletId + '_' + desen.slug + '.jpg';
+  }
+
+  /* --------------------------------------------------------------
+     Seçicileri kur
+     -------------------------------------------------------------- */
+  function paletleriCiz() {
+    const kap = $('paletListesi');
+    if (!kap) return;
+
+    kap.innerHTML = '';
+    PALETLER.forEach((palet) => {
+      const dugme = document.createElement('button');
+      dugme.type = 'button';
+      dugme.className = 'palet-dugme flex flex-col items-center gap-xs shrink-0 focus:outline-none';
+      dugme.setAttribute('aria-pressed', String(durum.palet === palet.id));
+      dugme.title = palet.ad + ' — ' + palet.aciklama;
+      dugme.innerHTML =
+        '<span class="palet-halka block w-16 h-16 rounded-full overflow-hidden bg-surface-container">' +
+        '<img class="palet-gorsel w-full h-full object-cover" alt="" loading="lazy" ' +
+        'src="' + ONIZLEME + 'palet_' + palet.id + '.jpg">' +
+        '</span>' +
+        '<span class="palet-ad font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap"></span>';
+      dugme.querySelector('.palet-ad').textContent = palet.ad;
+
+      dugme.addEventListener('click', () => {
+        durum.palet = palet.id;
+        paletleriTazele();
+        desenleriTazele();
+      });
+
+      kap.appendChild(dugme);
+    });
+
+    paletleriTazele();
+  }
+
+  function paletleriTazele() {
+    const kap = $('paletListesi');
+    if (!kap) return;
+
+    Array.from(kap.children).forEach((dugme, i) => {
+      dugme.setAttribute('aria-pressed', String(PALETLER[i].id === durum.palet));
+    });
+
+    const secili = PALETLER.find((p) => p.id === durum.palet);
+    const bilgi = $('paletAciklama');
+    if (bilgi && secili) bilgi.textContent = secili.aciklama;
+  }
+
+  function desenleriCiz() {
+    const kap = $('desenListesi');
+    if (!kap) return;
+
+    kap.innerHTML = '';
+    DESENLER.forEach((desen) => {
+      const dugme = document.createElement('button');
+      dugme.type = 'button';
+      dugme.className =
+        'desen-kart w-full flex items-center gap-sm p-base rounded-xl ' +
+        'bg-surface-container-low text-left focus:outline-none';
+      dugme.setAttribute('aria-pressed', String(durum.desen === desen.id));
+      dugme.innerHTML =
+        '<img class="desen-gorsel w-16 h-16 rounded-lg object-cover shrink-0 bg-surface-container" ' +
+        'alt="" loading="lazy" src="' + desenGorseli(desen, durum.palet) + '">' +
+        '<span class="flex-1 min-w-0">' +
+        '<span class="block font-body-md text-body-md text-on-surface desen-ad"></span>' +
+        '<span class="block font-label-sm text-label-sm text-outline desen-aciklama"></span>' +
+        '</span>' +
+        '<span class="desen-tik material-symbols-outlined text-gold">check_circle</span>';
+      dugme.querySelector('.desen-ad').textContent = desen.ad;
+      dugme.querySelector('.desen-aciklama').textContent = desen.aciklama;
+
+      dugme.addEventListener('click', () => {
+        durum.desen = desen.id;
+        desenleriTazele();
+      });
+
+      kap.appendChild(dugme);
+    });
+  }
+
+  function desenleriTazele() {
+    const kap = $('desenListesi');
+    if (!kap) return;
+
+    Array.from(kap.children).forEach((dugme, i) => {
+      const desen = DESENLER[i];
+      dugme.setAttribute('aria-pressed', String(desen.id === durum.desen));
+      // Örnek görsel seçili palete göre değişiyor: kullanıcı deseni
+      // kendi renginde görsün.
+      dugme.querySelector('img').src = desenGorseli(desen, durum.palet);
+    });
+  }
+
+  function kaydiriciyiKur() {
+    const kaydirici = $('yogunluk');
+    if (!kaydirici) return;
+
+    function tazele() {
+      durum.yogunluk = Number(kaydirici.value);
+      kaydirici.style.setProperty('--dolu', durum.yogunluk + '%');
+      const etiket = $('yogunlukEtiket');
+      if (etiket) etiket.textContent = yogunlukEtiketi(durum.yogunluk);
+    }
+
+    kaydirici.addEventListener('input', tazele);
+    tazele();
+  }
+
+  function oranlariKur() {
+    const kap = $('oranListesi');
+    if (!kap) return;
+
+    kap.innerHTML = '';
+    ORANLAR.forEach((secenek, i) => {
+      const dugme = document.createElement('button');
+      dugme.type = 'button';
+      dugme.className =
+        'flex-1 py-base rounded-lg font-label-md text-label-md transition-colors ' +
+        (i === 0
+          ? 'bg-surface-container-high text-on-surface'
+          : 'text-on-surface-variant hover:text-on-surface');
+      dugme.textContent = secenek.ad;
+      dugme.title = secenek.olcu;
+      dugme.setAttribute('aria-pressed', String(i === 0));
+
+      dugme.addEventListener('click', () => {
+        durum.oran = secenek.oran;
+        Array.from(kap.children).forEach((d, j) => {
+          const etkin = i === j;
+          d.setAttribute('aria-pressed', String(etkin));
+          d.className =
+            'flex-1 py-base rounded-lg font-label-md text-label-md transition-colors ' +
+            (etkin
+              ? 'bg-surface-container-high text-on-surface'
+              : 'text-on-surface-variant hover:text-on-surface');
+        });
+      });
+
+      kap.appendChild(dugme);
+    });
+  }
+
+  /* --------------------------------------------------------------
+     Ekran durumları
+     -------------------------------------------------------------- */
+  function ekraniGoster(hangi) {
+    ['bosluk', 'yukleniyor', 'sonuc'].forEach((ad) => {
+      const oge = $(ad);
+      if (oge) oge.classList.toggle('hidden', ad !== hangi);
+    });
+  }
+
+  function hataGoster(mesaj) {
+    const kutu = $('hataKutusu');
+    if (!kutu) return;
+    kutu.textContent = mesaj;
+    kutu.classList.remove('hidden');
+  }
+
+  function hatayiGizle() {
+    const kutu = $('hataKutusu');
+    if (kutu) kutu.classList.add('hidden');
+  }
+
+  function ilerlemeYaz(yuzde, mesaj) {
+    const dolgu = $('ilerlemeDolgu');
+    const oran = $('ilerlemeOran');
+    const metin = $('ilerlemeMetin');
+    if (dolgu) dolgu.style.width = Math.max(2, yuzde) + '%';
+    if (oran) oran.textContent = yuzde > 0 ? '%' + yuzde : '';
+    if (metin && mesaj) metin.textContent = mesaj;
+  }
+
+  function dugmeyiKilitle(kilitli) {
+    const dugme = $('uretDugmesi');
+    if (!dugme) return;
+    dugme.disabled = kilitli;
+    dugme.querySelector('.dugme-metin').textContent =
+      kilitli ? 'Üretiliyor...' : 'Ebruyu oluştur';
+  }
+
+  /* --------------------------------------------------------------
+     Üretim
+     -------------------------------------------------------------- */
+  function promptKur() {
+    // Uygulamadaki birleştirmenin aynısı (EbruViewModel.generateDesign).
+    const ek = ($('ekIstek') ? $('ekIstek').value.trim() : '');
+    const parcalar = [
+      durum.palet + ' renklerinde',
+      durum.desen + ' deseninde',
+    ];
+    if (ek) parcalar.push(ek);
+    return parcalar.join(', ');
+  }
+
+  async function isOlustur() {
+    const cevap = await fetch('/jobs', {
+      method: 'POST',
+      headers: EbruHesap.basliklar(),
+      body: JSON.stringify({
+        prompt: promptKur(),
+        intensity: durum.yogunluk,
+        aspect_ratio: durum.oran,
+      }),
+    });
+
+    const veri = await cevap.json().catch(() => ({}));
+
+    if (cevap.status === 401) {
+      EbruHesap.temizle();
+      throw new Error('Oturumun sona ermiş. Tekrar giriş yap.');
+    }
+    if (!cevap.ok) {
+      throw new Error(veri.message || 'Üretim başlatılamadı.');
+    }
+    return veri;
+  }
+
+  async function sonucuBekle(jobId) {
+    const bitis = Date.now() + 15 * 60 * 1000;
+
+    while (Date.now() < bitis) {
+      await new Promise((r) => setTimeout(r, 3000));
+
+      let cevap;
+      try {
+        cevap = await fetch('/jobs/' + jobId, { headers: EbruHesap.basliklar() });
+      } catch (e) {
+        // Geçici ağ hatası üretimi iptal etmesin; iş sunucuda sürüyor.
+        continue;
+      }
+
+      if (cevap.status === 404) {
+        throw new Error('Bu üretimin kaydı sunucuda kalmamış.');
+      }
+
+      const veri = await cevap.json().catch(() => ({}));
+
+      if (veri.job_status === 'done') return veri;
+      if (veri.job_status === 'error') {
+        throw new Error(veri.message || 'Üretim tamamlanamadı.');
+      }
+
+      const yuzde = Math.round((veri.progress || 0) * 100);
+      if (veri.queue_length > 1) {
+        ilerlemeYaz(yuzde, 'Sırada bekleniyor (' + veri.queue_length + ' iş)');
+      } else if (veri.eta_seconds) {
+        ilerlemeYaz(yuzde, 'Yaklaşık ' + Math.round(veri.eta_seconds) + ' saniye kaldı');
+      } else {
+        ilerlemeYaz(yuzde, 'Boyalar suya damlatılıyor...');
+      }
+    }
+
+    throw new Error('Üretim çok uzun sürdü. Lütfen tekrar dene.');
+  }
+
+  function sonucuYaz(sonuc) {
+    const gorsel = $('sonucGorsel');
+    gorsel.src = sonuc.image;
+    gorsel.classList.remove('eser-belir');
+    // Sınıfı yeniden eklemek animasyonu baştan çalıştırıyor.
+    void gorsel.offsetWidth;
+    gorsel.classList.add('eser-belir');
+
+    const paletAdi = (PALETLER.find((p) => p.id === durum.palet) || {}).ad || durum.palet;
+    const desenAdi = (DESENLER.find((d) => d.id === durum.desen) || {}).ad || durum.desen;
+
+    $('sonucPalet').textContent = paletAdi;
+    $('sonucDesen').textContent = desenAdi;
+    $('sonucYogunluk').textContent = '%' + durum.yogunluk + ' · ' + yogunlukEtiketi(durum.yogunluk);
+    $('sonucBoyut').textContent = (sonuc.width || '?') + '×' + (sonuc.height || '?');
+    $('sonucSeed').textContent = sonuc.seed != null ? sonuc.seed : '—';
+
+    const indir = $('indirDugmesi');
+    indir.onclick = () => {
+      const bag = document.createElement('a');
+      bag.href = gorsel.src;
+      bag.download = 'ebru-' + (sonuc.seed != null ? sonuc.seed : Date.now()) + '.png';
+      document.body.appendChild(bag);
+      bag.click();
+      document.body.removeChild(bag);
+    };
+
+    ekraniGoster('sonuc');
+  }
+
+  async function uret() {
+    if (durum.uretiliyor) return;
+
+    if (!EbruHesap.girisYapildiMi()) {
+      location.href = '/giris?devam=' + encodeURIComponent('/#olustur');
+      return;
+    }
+
+    durum.uretiliyor = true;
+    hatayiGizle();
+    dugmeyiKilitle(true);
+    ilerlemeYaz(0, 'Sunucuya bağlanılıyor...');
+    ekraniGoster('yukleniyor');
+
+    try {
+      const is = await isOlustur();
+      localStorage.setItem(BEKLEYEN_IS, is.job_id);
+
+      const sonuc = await sonucuBekle(is.job_id);
+      localStorage.removeItem(BEKLEYEN_IS);
+      sonucuYaz(sonuc);
+    } catch (hata) {
+      localStorage.removeItem(BEKLEYEN_IS);
+      hataGoster(hata.message);
+      ekraniGoster('bosluk');
+    } finally {
+      durum.uretiliyor = false;
+      dugmeyiKilitle(false);
+    }
+  }
+
+  /* Sayfa yenilendiğinde yarım kalan üretimi kaldığı yerden izler. */
+  async function bekleyeniSurdur() {
+    const jobId = localStorage.getItem(BEKLEYEN_IS);
+    if (!jobId || !EbruHesap.girisYapildiMi()) return;
+
+    durum.uretiliyor = true;
+    dugmeyiKilitle(true);
+    ilerlemeYaz(0, 'Süren üretim bulundu, izleniyor...');
+    ekraniGoster('yukleniyor');
+
+    try {
+      const sonuc = await sonucuBekle(jobId);
+      sonucuYaz(sonuc);
+    } catch (hata) {
+      // Kayıt düşmüşse sessizce boş ekrana dön: kullanıcı bir hata
+      // yapmadı, iş sunucuda süresi dolduğu için silinmiş.
+      ekraniGoster('bosluk');
+    } finally {
+      localStorage.removeItem(BEKLEYEN_IS);
+      durum.uretiliyor = false;
+      dugmeyiKilitle(false);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!$('uretDugmesi')) return; // Üretim paneli bu sayfada yok.
+
+    paletleriCiz();
+    desenleriCiz();
+    kaydiriciyiKur();
+    oranlariKur();
+
+    $('uretDugmesi').addEventListener('click', uret);
+
+    const yeni = $('yeniDugmesi');
+    if (yeni) {
+      yeni.addEventListener('click', () => {
+        ekraniGoster('bosluk');
+        document.getElementById('olustur').scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+
+    const benzer = $('benzerDugmesi');
+    if (benzer) benzer.addEventListener('click', uret);
+
+    bekleyeniSurdur();
+  });
+})();

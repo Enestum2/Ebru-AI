@@ -1,83 +1,130 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ebru AI - Nasıl Çalışır?</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=20260814-2">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-</head>
-<body>
+{% extends "taban.html" %}
+{% set sayfa = 'nasil_calisir' %}
 
-    <header id="mainHeader">
-        <div class="logo">Ebru<span>.AI</span></div>
-       <nav>
-    <ul>
-        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
-        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
-        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
-        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
-    </ul>
-</nav>
-    </header>
+{% block baslik %}Ebru AI — Nasıl Çalışır{% endblock %}
+{% block aciklama %}Türkçe istekten görsele: prompt motoru, çeviri katmanı, kendi eğittiğimiz LoRA ve üretim donanımı.{% endblock %}
 
-    <div class="content-section">
-        <h2 class="page-title">Sistem <span class="gradient-text">Mimarisi</span></h2>
-        <p class="page-subtitle">Geleneksel sanatın yapay zeka ile işlenme serüveni.</p>
-        
-        <div class="timeline-container">
-            
-            <div class="step-row">
-                <div class="step-text-area">
-                    <div class="step-number">01</div>
-                    <h3 class="typewriter-heading gradient-text" data-text="Kullanıcı İstemi (Prompting)"></h3>
-                    <p class="typewriter-text" data-text="Kullanıcı, hayalindeki sahneyi doğal Türkçe diliyle sisteme girer. Örneğin: 'Boğazda gün batımı'. Sistem bu ham veriyi alır ve işleme hattına sokar."></p>
-                </div>
-                <div class="step-image-area">
-                    <div class="image-wrapper">
-                        <img src="{{ url_for('static', filename='images/adim-1.jpg') }}" alt="Hatip ebru örneği">
-                        <div class="overlay"></div>
-                    </div>
-                </div>
-            </div>
+{% block icerik %}
 
-            <div class="step-row reverse">
-                <div class="step-text-area">
-                    <div class="step-number">02</div>
-                    <h3 class="typewriter-heading gradient-text" data-text="NLP Çeviri Katmanı"></h3>
-                    <p class="typewriter-text" data-text="Backend sunucusu, gelen Türkçe metni Google Translate API altyapısını kullanarak İngilizceye çevirir ve 'Prompt Engineering' modülü ile Ebru sanatına uygun teknik terimleri komuta ekler."></p>
-                </div>
-                <div class="step-image-area">
-                    <div class="image-wrapper">
-                        <img src="{{ url_for('static', filename='images/adim-2.jpg') }}" alt="Gelgit ebru örneği">
-                        <div class="overlay"></div>
-                    </div>
-                </div>
-            </div>
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="flex flex-col gap-sm max-w-3xl ac gorundu">
+    <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Sistem</span>
+    <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">Nasıl çalışır?</h1>
+    <p class="font-body-lg text-body-lg text-on-surface-variant">
+      Yazdığın Türkçe istek, görsele dönüşene kadar dört durakta işleniyor.
+      Aşağıdaki sayılar tahmin değil: kendi makinemizde ölçüldü.
+    </p>
+  </div>
+</section>
 
-            <div class="step-row">
-                <div class="step-text-area">
-                    <div class="step-number">03</div>
-                    <h3 class="typewriter-heading gradient-text" data-text="Difüzyon Modeli & Render"></h3>
-                    <p class="typewriter-text" data-text="Hazırlanan komut, GPU üzerinde çalışan SDXL modeline iletilir. Model, 'Gürültüden Arındırma' (Denoising) işlemiyle 20 adımda piksel piksel Ebru sanatını oluşturur ve sonucu kullanıcıya sunar."></p>
-                </div>
-                <div class="step-image-area">
-                    <div class="image-wrapper">
-                        <img src="{{ url_for('static', filename='images/adim-3.jpg') }}" alt="Bülbül yuvası ebru örneği">
-                        <div class="overlay"></div>
-                    </div>
-                </div>
-            </div>
+<!-- ==============================================================
+     ADIMLAR
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-md flex flex-col gap-lg">
 
+  {% for no, baslik, metin, gorsel, ters in [
+    ('01', 'Seçim ve istek',
+     'Renk paletini, deseni ve desen yoğunluğunu seçiyorsun; istersen serbest metinle ekleme yapıyorsun. Seçimler tek bir Türkçe cümleye birleşiyor: "osmanli renklerinde, battal deseninde, bir gül".',
+     'adim-1.jpg', false),
+    ('02', 'Çeviri ve prompt motoru',
+     'Sunucu bu cümleyi İngilizce prompt haline getiriyor. Sözlükte karşılığı olan kelimeler (palet, desen, tanınan nesneler) doğrudan kendi İngilizce karşılığıyla yazılıyor; yalnızca serbest metin çeviriye gidiyor. Ardından ebru tanımı, LoRA tetikleyici kelimeleri ve renk tarifi ağırlıklarıyla ekleniyor.',
+     'adim-2.jpg', true),
+    ('03', 'SDXL + kendi ebru modelimiz',
+     'Prompt, ekran kartındaki SDXL modeline gidiyor. Üstüne kendi eğittiğimiz ebru LoRA modeli biniyor; ağırlığı senin seçtiğin desen yoğunluğundan geliyor. Nesne istediğinde ağırlığa tavan uygulanıyor, yoksa doku nesneyi tamamen örtüyor.',
+     'adim-3.jpg', false),
+    ('04', 'Üretim ve teslim',
+     'Üretim kuyruğa alınıyor ve iş numarası hemen dönüyor; tarayıcı ilerlemeyi bu numarayla soruyor. Böylece sayfayı yenilesen de üretim kaybolmuyor. Sonuç 704×1024 çözünürlüğünde, yaklaşık 95 saniyede hazır oluyor.',
+     'hero-ebru.jpg', true)
+  ] %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-md items-center ac">
+      <div class="flex flex-col gap-sm {% if ters %}md:order-2{% endif %}">
+        <span class="adim-no font-display-lg text-display-lg leading-none">{{ no }}</span>
+        <h2 class="font-headline-md text-headline-md text-on-surface">{{ baslik }}</h2>
+        <p class="font-body-md text-body-md text-on-surface-variant" data-yazi="{{ metin }}">{{ metin }}</p>
+      </div>
+
+      <div class="eser-kart rounded-xl overflow-hidden bg-surface-container {% if ters %}md:order-1{% endif %}">
+        <div class="aspect-[4/3] overflow-hidden">
+          <img src="{{ url_for('static', filename='images/' + gorsel) }}" alt=""
+               class="w-full h-full object-cover" loading="lazy">
         </div>
+      </div>
     </div>
+  {% endfor %}
+</section>
 
-    <footer>
-        <p>&copy; 2026 Ebru AI - TÜBİTAK Projesi - Tüm Hakları Saklıdır.</p>
-    </footer>
+<!-- ==============================================================
+     TEKNİK KÜNYE
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-lg">
+  <div class="flex items-center gap-base mb-md ac">
+    <span class="font-display-lg text-display-lg-mobile text-surface-variant leading-none">02</span>
+    <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest">Teknik künye</h2>
+  </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-</body>
-</html>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-sm">
+    {% for etiket, deger, alt in [
+      ('Taban model', 'SDXL 1.0', 'Stable Diffusion XL'),
+      ('Ebru modeli', 'ebru-lora-sdxl', 'Ekibin hazırladığı 95 görselle eğitildi'),
+      ('Eğitim', 'Kohya_ss · dim 32 / alpha 16', 'U-Net 3e-4, TE 6e-5, AdamW8bit, fp16'),
+      ('Hızlandırma', 'SDXL-Lightning · 4 adım', 'CFG 1.8, Euler / SGM Uniform'),
+      ('Donanım', 'RTX 3060 Laptop · 6 GB', 'Üretim kendi makinemizde yapılıyor'),
+      ('Çözünürlük', '704×1024', 'Kare ve yatay seçenekleri de var'),
+      ('Süre', '~95 saniye', 'Lightning olmadan 16 adımda ~3,5 dakika'),
+      ('Çeviri', 'Google Translate', 'Yalnızca serbest metin çeviriye gidiyor'),
+      ('Sunum', 'Flask + Cloudflare tüneli', 'ebruai.com kalıcı adresi')
+    ] %}
+      <div class="rounded-xl bg-surface-container-lowest border border-white/5 p-sm ac">
+        <div class="font-label-sm text-label-sm text-outline uppercase tracking-widest">{{ etiket }}</div>
+        <div class="font-headline-sm text-headline-sm text-on-surface mt-xs">{{ deger }}</div>
+        <div class="font-label-sm text-label-sm text-on-surface-variant mt-xs">{{ alt }}</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <p class="mt-md font-label-sm text-label-sm text-outline max-w-3xl">
+    Model kartı ve eğitim ayrıntıları
+    <a class="text-tertiary hover:text-tertiary-fixed" href="https://huggingface.co/enestum2/ebru-lora-sdxl" target="_blank" rel="noopener">Hugging Face</a>'te,
+    kaynak kod
+    <a class="text-tertiary hover:text-tertiary-fixed" href="https://github.com/enestum2/Ebru-AI" target="_blank" rel="noopener">GitHub</a>'ta.
+    Eğitim veri seti ekibe ait; telif kısıtı yok.
+  </p>
+</section>
+
+<!-- ==============================================================
+     SIK SORULANLAR
+     ============================================================== -->
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pb-xl">
+  <div class="flex items-center gap-base mb-md ac">
+    <span class="font-display-lg text-display-lg-mobile text-surface-variant leading-none">03</span>
+    <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest">Sık sorulanlar</h2>
+  </div>
+
+  <div class="flex flex-col gap-xs max-w-4xl">
+    {% for soru, cevap in [
+      ('Yazdığım nesne neden bazen çıkmıyor?',
+       'Motor yalnızca sözlüğünde bulunan nesneleri nesne olarak tanıyor. Tanınmayan bir kelimede desen tarifi baskın kalıyor ve doku konuyu örtüyor. Sözlükte şu an 71 kelime var; eksik gördüğün bir şey olursa eklenebilir.'),
+      ('Desen yoğunluğunu sonuna kadar açsam ne olur?',
+       'Yoğunluk doğrudan ebru modelinin ağırlığına dönüşüyor (0,30–0,90). Ama bir nesne istediğinde 0,60 tavanı uygulanıyor: bu yüzden nesneli üretimlerde %50 üstü pratikte bir şey değiştirmiyor. Nesnesiz saf ebruda ise fark net görülüyor.'),
+      ('Üretim neden bu kadar sürüyor?',
+       'Görseller kiralık bulut yerine kendi ekran kartımızda üretiliyor. 6 GB bellekli bir dizüstü kartında SDXL sınırda çalışıyor; Lightning hızlandırmasıyla süre 3,5 dakikadan ~95 saniyeye indi.'),
+      ('Günlük bir sınır var mı?',
+       'Evet, hesap başına günlük 200 üretim. Sınır herkes için geçerli.'),
+      ('Ürettiğim eser kimin?',
+       'Senin. İndirip istediğin gibi kullanabilirsin. Üretimler ayrıca sunucuda kayıt altında tutuluyor, böylece bir aksilikte geri dönüş noktası oluyor.')
+    ] %}
+      <details class="group rounded-xl bg-surface-container-lowest border border-white/5 overflow-hidden ac">
+        <summary class="flex items-center justify-between gap-sm p-sm cursor-pointer
+                        font-body-lg text-body-lg text-on-surface list-none
+                        hover:bg-surface-container-low transition-colors">
+          {{ soru }}
+          <span class="material-symbols-outlined text-tertiary transition-transform duration-300
+                       group-open:rotate-45 shrink-0">add</span>
+        </summary>
+        <p class="px-sm pb-sm font-body-md text-body-md text-on-surface-variant">{{ cevap }}</p>
+      </details>
+    {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

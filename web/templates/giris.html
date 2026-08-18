@@ -1,61 +1,73 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ebru AI - Giriş</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='hesap.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='mobile-theme.css') }}?v=999-?">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
+{% extends "taban.html" %}
+{% set sayfa = 'giris_sayfasi' %}
 
-<header id="mainHeader">
-    <div class="logo">Ebru<span>.AI</span></div>
-    <nav>
-    <ul>
-        <li><a href="{{ url_for('home') }}">Anasayfa</a></li>
-        <li><a href="{{ url_for('nasil_calisir') }}">Nasıl Çalışır?</a></li>
-        <li><a href="{{ url_for('ornekler') }}">Galeri</a></li>
-        <li><a href="{{ url_for('indir_sayfasi') }}">Uygulama</a></li>
-    </ul>
-</nav>
-</header>
+{% block baslik %}Ebru AI — Giriş{% endblock %}
+{% block aciklama %}Ebru AI hesabına giriş yap ya da ücretsiz hesap aç.{% endblock %}
 
-<main class="hesap-sayfa">
-    <div class="hesap-kutu">
-        <h1 id="baslik">Giriş Yap</h1>
-        <p class="hesap-alt" id="altBaslik">
-            Eser üretmek için hesabına giriş yap.
+{% block icerik %}
+
+<section class="w-full min-h-[calc(100vh-80px)] flex items-center justify-center px-md py-lg">
+  <div class="w-full max-w-md ac gorundu">
+
+    <div class="rounded-xl bg-surface-container-lowest border border-white/5 shadow-2xl
+                p-md md:p-lg relative overflow-hidden">
+      <div class="absolute -top-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-[80px] pointer-events-none"></div>
+
+      <div class="relative z-10 flex flex-col items-center text-center gap-xs mb-md">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt=""
+             class="w-16 h-16 rounded-xl object-cover ring-1 ring-gold/30 mb-xs">
+        <h1 id="baslik" class="font-headline-md text-headline-md text-on-surface">Giriş yap</h1>
+        <p id="altBaslik" class="font-body-md text-body-md text-on-surface-variant">
+          Eser üretmek için hesabına giriş yap.
+        </p>
+      </div>
+
+      <form id="hesapForm" autocomplete="on" class="relative z-10 flex flex-col gap-sm">
+        <div class="flex flex-col gap-xs">
+          <label for="kullaniciAdi" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+            Kullanıcı adı
+          </label>
+          <input type="text" id="kullaniciAdi" name="username" autocomplete="username" required
+                 class="w-full rounded-lg bg-surface-container-low border border-white/10
+                        focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                        px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+        </div>
+
+        <div class="flex flex-col gap-xs">
+          <label for="sifre" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+            Şifre
+          </label>
+          <input type="password" id="sifre" name="password" autocomplete="current-password" required
+                 class="w-full rounded-lg bg-surface-container-low border border-white/10
+                        focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                        px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+        </div>
+
+        <p id="kayitIpucu" hidden class="font-label-sm text-label-sm text-outline">
+          Kullanıcı adı 3-24 karakter, şifre en az 6 karakter olmalı.
         </p>
 
-        <form id="hesapForm" autocomplete="on">
-            <label for="kullaniciAdi">Kullanıcı adı</label>
-            <input type="text" id="kullaniciAdi" name="username"
-                   autocomplete="username" required>
+        <div id="hataKutusu" hidden
+             class="p-sm rounded-lg bg-error/10 border border-error/30
+                    font-label-md text-label-md text-error"></div>
 
-            <label for="sifre">Şifre</label>
-            <input type="password" id="sifre" name="password"
-                   autocomplete="current-password" required>
+        <button type="submit" id="gonderBtn"
+                class="altin-dugme w-full py-sm rounded-full font-label-md text-label-md
+                       uppercase tracking-wider flex items-center justify-center gap-xs mt-xs">
+          <span class="dugme-metin relative z-10">Giriş yap</span>
+        </button>
+      </form>
 
-            <p class="hesap-ipucu" id="kayitIpucu" hidden>
-                Kullanıcı adı 3-24 karakter, şifre en az 6 karakter olmalı.
-            </p>
-
-            <div id="hataKutusu" class="hesap-hata" hidden></div>
-
-            <button type="submit" class="primary-btn" id="gonderBtn">
-                Giriş Yap
-            </button>
-        </form>
-
-        <p class="hesap-gecis">
-            <span id="gecisMetin">Hesabın yok mu?</span>
-            <a href="#" id="gecisBtn">Kayıt ol</a>
-        </p>
+      <p class="relative z-10 text-center font-body-md text-body-md text-on-surface-variant mt-md">
+        <span id="gecisMetin">Hesabın yok mu?</span>
+        <a href="#" id="gecisBtn" class="text-tertiary hover:text-tertiary-fixed font-label-md text-label-md">Kayıt ol</a>
+      </p>
     </div>
-</main>
-<script src="{{ url_for('static', filename='hesap.js') }}"></script>
-</body>
-</html>
+
+    <p class="text-center font-label-sm text-label-sm text-outline mt-md">
+      Hesabın site ve mobil uygulamada ortak çalışır. Günlük üretim hakkı: 200.
+    </p>
+  </div>
+</section>
+
+{% endblock %}

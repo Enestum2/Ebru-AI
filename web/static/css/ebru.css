@@ -1,0 +1,309 @@
+/* Ebru AI — site geneli özel stiller.
+ *
+ * Renkler, tipografi ve boşluklar Tailwind yapılandırmasında
+ * (templates/taban.html). Burada yalnızca Tailwind'in üretmediği
+ * şeyler var: hareket, kaydırıcı görünümü, mürekkep animasyonları.
+ *
+ * Hareketi azaltma isteyen kullanıcılar için en altta toplu bir
+ * kapatma bloğu var; bütün animasyonlar oradan durduruluyor.
+ */
+
+:root {
+  --gold: #c7a65a;
+  --mint: #89d5c1;
+  --surface: #00142c;
+  --ivory: #f4f0e8;
+}
+
+html { scroll-behavior: smooth; }
+body { overscroll-behavior-y: none; }
+
+/* Bağlantı hedeflerinin sabit başlığın altında kalmaması için. */
+[id] { scroll-margin-top: 96px; }
+
+::selection { background: rgba(199, 166, 90, 0.35); color: var(--ivory); }
+
+/* Koyu zemine uygun ince kaydırma çubuğu. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #000e23; }
+::-webkit-scrollbar-thumb { background: #1e3654; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #233a59; }
+
+/* ------------------------------------------------------------------
+   Akışkan zemin — suya damlatılmış boyanın yayılması
+   ------------------------------------------------------------------ */
+.akiskan {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.22;
+  will-change: transform;
+}
+
+.akiskan-1 {
+  width: 46vw; height: 46vw;
+  min-width: 340px; min-height: 340px;
+  left: -8vw; top: 4vh;
+  background: radial-gradient(circle at 35% 35%, var(--mint), transparent 68%);
+  animation: yuz1 26s ease-in-out infinite;
+}
+
+.akiskan-2 {
+  width: 52vw; height: 52vw;
+  min-width: 380px; min-height: 380px;
+  right: -12vw; top: 38vh;
+  background: radial-gradient(circle at 60% 40%, var(--gold), transparent 66%);
+  animation: yuz2 34s ease-in-out infinite;
+}
+
+@keyframes yuz1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(6vw, -5vh) scale(1.08); }
+  66%      { transform: translate(-4vw, 6vh) scale(0.94); }
+}
+
+@keyframes yuz2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%      { transform: translate(-6vw, 5vh) scale(1.06); }
+  70%      { transform: translate(4vw, -4vh) scale(0.96); }
+}
+
+/* ------------------------------------------------------------------
+   Kaydırınca beliren bölümler
+   ------------------------------------------------------------------ */
+/* Gizleme yalnizca JavaScript calisiyorken uygulaniyor: betik
+   yuklenmezse ya da hata verirse icerik gorunmez kalmasin diye
+   <html> etiketine "js" sinifi taban.html'de ekleniyor. */
+.js .ac {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.js .ac.gorundu { opacity: 1; transform: none; }
+
+/* Sıralı gecikmeler: kartlar arka arkaya belirsin. */
+.ac-1 { transition-delay: 0.08s; }
+.ac-2 { transition-delay: 0.16s; }
+.ac-3 { transition-delay: 0.24s; }
+.ac-4 { transition-delay: 0.32s; }
+.ac-5 { transition-delay: 0.40s; }
+
+/* ------------------------------------------------------------------
+   Altın birincil düğme (uygulamadaki GoldButton'ın karşılığı)
+   ------------------------------------------------------------------ */
+.altin-dugme {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #d8b96b 0%, #c7a65a 45%, #a8873f 100%);
+  color: #00142c;
+  box-shadow: 0 8px 30px rgba(199, 166, 90, 0.25);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s;
+}
+.altin-dugme:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(199, 166, 90, 0.42);
+}
+.altin-dugme:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* Üzerinden geçen ışık — düğme "canlı" dursun diye. */
+.altin-dugme::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,0.45) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: parilti 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes parilti {
+  0%, 62% { transform: translateX(-120%); }
+  100%    { transform: translateX(120%); }
+}
+
+/* ------------------------------------------------------------------
+   Palet ve desen seçicileri
+   ------------------------------------------------------------------ */
+.palet-halka {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.35s, border-color 0.25s;
+  border: 2px solid transparent;
+}
+.palet-dugme:hover .palet-halka { transform: translateY(-4px) scale(1.05); }
+
+.palet-dugme[aria-pressed="true"] .palet-halka {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(199, 166, 90, 0.14), 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.palet-dugme[aria-pressed="true"] .palet-ad { color: var(--gold); font-weight: 600; }
+
+/* Seçili olmayan örnekler soluk — uygulamadaki OrnekGorsel(soluk: true). */
+.palet-dugme .palet-gorsel { opacity: 0.55; transition: opacity 0.3s; }
+.palet-dugme:hover .palet-gorsel,
+.palet-dugme[aria-pressed="true"] .palet-gorsel { opacity: 1; }
+
+.desen-kart {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  transition: border-color 0.25s, background-color 0.25s, transform 0.25s;
+}
+.desen-kart:hover { transform: translateX(4px); }
+.desen-kart[aria-pressed="true"] {
+  border-color: var(--gold);
+  border-width: 1.5px;
+  background-color: #05203e;
+}
+.desen-kart[aria-pressed="true"] .desen-tik { opacity: 1; transform: scale(1); }
+.desen-tik { opacity: 0; transform: scale(0.6); transition: opacity 0.25s, transform 0.25s; }
+
+.desen-kart .desen-gorsel { opacity: 0.55; transition: opacity 0.3s; }
+.desen-kart:hover .desen-gorsel,
+.desen-kart[aria-pressed="true"] .desen-gorsel { opacity: 1; }
+
+/* ------------------------------------------------------------------
+   Yoğunluk kaydırıcısı
+   ------------------------------------------------------------------ */
+input[type="range"].ebru-kaydirici {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].ebru-kaydirici::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--gold) var(--dolu, 50%), #122b49 var(--dolu, 50%));
+}
+input[type="range"].ebru-kaydirici::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px; height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 3px solid #00142c;
+  box-shadow: 0 0 0 1px rgba(199, 166, 90, 0.6), 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: transform 0.2s;
+}
+input[type="range"].ebru-kaydirici:hover::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"].ebru-kaydirici::-moz-range-track {
+  height: 4px; border-radius: 999px; background: #122b49;
+}
+input[type="range"].ebru-kaydirici::-moz-range-progress {
+  height: 4px; border-radius: 999px; background: var(--gold);
+}
+input[type="range"].ebru-kaydirici::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--gold); border: 3px solid #00142c;
+}
+
+/* ------------------------------------------------------------------
+   Üretim sırasındaki mürekkep damlası
+   Tasarım belgesi dönen çember yerine "suya damlayan mürekkep"
+   istiyor; halkalar dışa doğru açılıyor.
+   ------------------------------------------------------------------ */
+.damla { position: relative; width: 120px; height: 120px; }
+.damla span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(199, 166, 90, 0.55);
+  animation: damla-ac 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+.damla span:nth-child(2) { animation-delay: 0.8s; }
+.damla span:nth-child(3) { animation-delay: 1.6s; }
+.damla span:nth-child(4) { animation-delay: 2.4s; }
+.damla .cekirdek {
+  position: absolute;
+  inset: 42%;
+  border: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--gold), rgba(199, 166, 90, 0));
+  animation: nabiz 2.4s ease-in-out infinite;
+}
+@keyframes damla-ac {
+  0%   { transform: scale(0.25); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes nabiz {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50%      { transform: scale(1.35); opacity: 0.5; }
+}
+
+/* İlerleme çubuğu */
+.ilerleme-dolgu {
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  background: linear-gradient(90deg, #a8873f, var(--gold), #e2cd92);
+  background-size: 200% 100%;
+  animation: kayan-altin 2.5s linear infinite;
+}
+@keyframes kayan-altin {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Sonuç görseli belirirken */
+.eser-belir { animation: eser-ac 1s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes eser-ac {
+  from { opacity: 0; transform: scale(1.04); filter: blur(12px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+/* ------------------------------------------------------------------
+   Galeri şeridi — kesintisiz akan örnekler
+   ------------------------------------------------------------------ */
+.serit { display: flex; width: max-content; animation: serit-ak 48s linear infinite; }
+.serit-kap:hover .serit { animation-play-state: paused; }
+@keyframes serit-ak {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Galeri kartı üstündeki bilgi katmanı */
+.eser-kart .eser-bilgi {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s, transform 0.4s;
+}
+.eser-kart:hover .eser-bilgi { opacity: 1; transform: none; }
+.eser-kart img { transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
+.eser-kart:hover img { transform: scale(1.06); }
+
+/* Adım kartlarındaki numara */
+.adim-no {
+  background: linear-gradient(180deg, rgba(199,166,90,0.9), rgba(199,166,90,0.15));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Yazı makinesi imleci (Nasıl Çalışır sayfası) */
+.imlec::after {
+  content: "";
+  display: inline-block;
+  width: 2px; height: 1em;
+  margin-left: 3px;
+  background: var(--gold);
+  vertical-align: -0.15em;
+  animation: imlec-yanip 1s steps(2) infinite;
+}
+@keyframes imlec-yanip { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ------------------------------------------------------------------
+   Hareket azaltma isteği: her şeyi durdur
+   ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .js .ac { opacity: 1; transform: none; }
+}
+footer { margin-top: 8rem;
+          navigation: none;
+          visibility: hidden;
+          -ms-layout-grid: var(--gold);
+          scrollbar-color: var(--gold) var(--surface);
+}
