@@ -88,8 +88,52 @@ const EbruHesap = {
   },
 };
 
+/* Yönetici hesabıyla girildiyse menüye "Yönetim" bağlantısı ekler.
+   Aynı istek oturumun hâlâ geçerli olduğunu da doğruluyor: sunucu
+   401 dönerse yerel oturum temizleniyor, yoksa kullanıcı giriş
+   yapmış görünüp her üretimde hata alıyordu. */
+EbruHesap.yoneticiKontrol = async function () {
+  if (!this.girisYapildiMi()) return;
+
+  let veri;
+  try {
+    const cevap = await fetch('/auth/me', { headers: this.basliklar() });
+    if (cevap.status === 401) {
+      this.temizle();
+      this.basligiKur();
+      return;
+    }
+    if (!cevap.ok) return;
+    veri = await cevap.json();
+  } catch (e) {
+    return; // Sunucuya ulaşılamıyorsa menüyü olduğu gibi bırak.
+  }
+
+  if (!veri || !veri.is_admin) return;
+
+  const ekle = (kap, sinif) => {
+    if (!kap || kap.querySelector('[data-yonetim]')) return;
+    const bag = document.createElement('a');
+    bag.href = '/admin';
+    bag.dataset.yonetim = '1';
+    bag.className = sinif;
+    bag.textContent = 'Yönetim';
+    kap.appendChild(bag);
+  };
+
+  ekle(
+    document.querySelector('#ustBaslik nav.hidden.lg\:flex'),
+    'font-label-md text-label-md text-gold hover:text-ivory transition-colors'
+  );
+  ekle(
+    document.querySelector('#mobilMenu .flex.flex-col'),
+    'py-sm font-label-md text-label-md text-gold hover:text-ivory transition-colors'
+  );
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   EbruHesap.basligiKur();
+  EbruHesap.yoneticiKontrol();
 
   const form = document.getElementById('hesapForm');
   if (!form) return;

@@ -69,7 +69,16 @@ if not exist "%A1111_DIR%\webui-user.bat" (
     pause
     exit /b 1
 )
-start "Ebru - Stable Diffusion" /d "%A1111_DIR%" cmd /k "%A1111_DIR%\webui-user.bat"
+REM A1111 zaten aciksa ikinci kopya acilmiyor. Eskiden kosulsuz
+REM aciliyordu; betik ikinci kez calistirildiginda ikinci bir A1111
+REM kalkip 7860'i alamiyor ama ~3 GB bellek tutuyordu (6 GB'lik
+REM kartta uretim sirasinda sorun cikariyor).
+call :PORT_DOLU_MU 7860
+if "%PORT_DURUM%"=="dolu" (
+    echo    Zaten calisiyor, ikinci kopya acilmadi.
+) else (
+    start "Ebru - Stable Diffusion" /d "%A1111_DIR%" cmd /k "%A1111_DIR%\webui-user.bat"
+)
 
 REM ---------- 2) FLASK ----------
 echo [2/3] Flask sunucusu baslatiliyor...
@@ -79,7 +88,15 @@ if not exist "%BACKEND_DIR%\app.py" (
     pause
     exit /b 1
 )
-start "Ebru - Flask" /d "%BACKEND_DIR%" cmd /k venv\Scripts\python.exe app.py
+REM Ayni kontrol Flask icin. Iki Flask ayni porta baglanabiliyor
+REM ve istekler ikisi arasinda dagiliyor; is numaralari tek surecin
+REM belleginde tutuldugu icin "is bulunamadi" hatalari cikiyor.
+call :PORT_DOLU_MU 5000
+if "%PORT_DURUM%"=="dolu" (
+    echo    Zaten calisiyor, ikinci kopya acilmadi.
+) else (
+    start "Ebru - Flask" /d "%BACKEND_DIR%" cmd /k venv\Scripts\python.exe app.py
+)
 
 REM ---------- 3) TUNEL ----------
 if /i "%TUNEL%"=="yok" (
@@ -233,3 +250,15 @@ echo  Kontrol: http://127.0.0.1:5000/health
 echo ============================================================
 echo.
 pause
+
+goto :EOF
+
+REM ------------------------------------------------------------
+REM  PORT_DOLU_MU <port>
+REM  Verilen portu dinleyen bir surec varsa PORT_DURUM=dolu olur.
+REM ------------------------------------------------------------
+:PORT_DOLU_MU
+set "PORT_DURUM=bos"
+netstat -ano | findstr /c:"LISTENING" | findstr /r /c:":%~1 " >nul 2>&1
+if not errorlevel 1 set "PORT_DURUM=dolu"
+exit /b 0

@@ -168,18 +168,69 @@
     });
   }
 
+  /* Kaydirici: uygulamadaki Slider gibi 20 bolmeli (centikli) ve
+     suruklerken deger balonu gosteriyor. Centiklerle balonun konumu
+     tarayicinin thumb konumuyla ayni formulden hesaplaniyor:
+     x = (deger/100) * (genislik - thumb) + thumb/2  */
+  const THUMB = 20;
+
+  function kaydiriciKonumu(kaydirici, deger) {
+    const genislik = kaydirici.getBoundingClientRect().width;
+    if (!genislik) return 0;
+    return (deger / 100) * (genislik - THUMB) + THUMB / 2;
+  }
+
   function kaydiriciyiKur() {
     const kaydirici = $('yogunluk');
     if (!kaydirici) return;
+
+    const kap = kaydirici.closest('.kaydirici-kap');
+    const balon = $('yogunlukBalon');
+    const centikKap = $('yogunlukCentik');
+
+    // 0'dan 100'e 5'er adim: uygulamadaki divisions: 20 ile ayni.
+    const centikler = [];
+    if (centikKap) {
+      centikKap.innerHTML = '';
+      for (let d = 0; d <= 100; d += 5) {
+        const nokta = document.createElement('span');
+        nokta.className = 'kaydirici-centik';
+        nokta.dataset.deger = String(d);
+        centikKap.appendChild(nokta);
+        centikler.push(nokta);
+      }
+    }
+
+    function yerlestir() {
+      centikler.forEach((nokta) => {
+        const d = Number(nokta.dataset.deger);
+        nokta.style.left = kaydiriciKonumu(kaydirici, d) + 'px';
+        nokta.classList.toggle('dolu', d <= durum.yogunluk);
+      });
+      if (balon) balon.style.left = kaydiriciKonumu(kaydirici, durum.yogunluk) + 'px';
+    }
 
     function tazele() {
       durum.yogunluk = Number(kaydirici.value);
       kaydirici.style.setProperty('--dolu', durum.yogunluk + '%');
       const etiket = $('yogunlukEtiket');
       if (etiket) etiket.textContent = yogunlukEtiketi(durum.yogunluk);
+      if (balon) balon.textContent = '%' + durum.yogunluk;
+      yerlestir();
+    }
+
+    function balonuGoster(goster) {
+      if (kap) kap.classList.toggle('etkin', goster);
     }
 
     kaydirici.addEventListener('input', tazele);
+    kaydirici.addEventListener('pointerdown', () => balonuGoster(true));
+    kaydirici.addEventListener('focus', () => balonuGoster(true));
+    kaydirici.addEventListener('blur', () => balonuGoster(false));
+    window.addEventListener('pointerup', () => balonuGoster(false));
+    // Genislik degisince centikler kaymasin.
+    window.addEventListener('resize', yerlestir);
+
     tazele();
   }
 
@@ -416,8 +467,20 @@
     }
   }
 
+  /* Giris yapilmamissa panelin ustunde uyari gosterilir. Sunucu da
+     giris istiyor (POST /jobs -> 401); bu yalnizca kullaniciyi
+     bosuna secim yaptirip sonunda cevirmemek icin. */
+  function girisDurumunuYansit() {
+    const uyari = $('girisUyarisi');
+    if (!uyari) return;
+    uyari.classList.toggle('hidden', EbruHesap.girisYapildiMi());
+    uyari.classList.toggle('flex', !EbruHesap.girisYapildiMi());
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     if (!$('uretDugmesi')) return; // Üretim paneli bu sayfada yok.
+
+    girisDurumunuYansit();
 
     paletleriCiz();
     desenleriCiz();

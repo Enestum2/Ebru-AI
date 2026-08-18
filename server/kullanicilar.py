@@ -276,6 +276,46 @@ def bugunku_kullanicilar():
     ]
 
 
+def hepsi():
+    """
+    Yönetim paneli için: kayıtlı bütün kullanıcılar, bugünkü ve
+    toplam üretim sayılarıyla birlikte.
+    """
+    gun = time.strftime("%Y-%m-%d")
+    with _lock, _baglan() as db:
+        satirlar = db.execute(
+            """
+            SELECT k.id,
+                   k.kullanici_adi,
+                   k.olusturma,
+                   k.son_giris,
+                   COALESCE(b.sayi, 0)   AS bugun,
+                   COALESCE(t.toplam, 0) AS toplam
+            FROM kullanicilar k
+            LEFT JOIN kullanim b
+                   ON b.kullanici_id = k.id AND b.gun = ?
+            LEFT JOIN (
+                   SELECT kullanici_id, SUM(sayi) AS toplam
+                   FROM kullanim GROUP BY kullanici_id
+            ) t ON t.kullanici_id = k.id
+            ORDER BY k.olusturma DESC
+            """,
+            (gun,),
+        ).fetchall()
+
+    return [
+        {
+            "id": s["id"],
+            "kullanici_adi": s["kullanici_adi"],
+            "olusturma": s["olusturma"],
+            "son_giris": s["son_giris"],
+            "bugun": s["bugun"],
+            "toplam": s["toplam"],
+        }
+        for s in satirlar
+    ]
+
+
 def kullanici_sayisi():
     with _lock, _baglan() as db:
         satir = db.execute(
