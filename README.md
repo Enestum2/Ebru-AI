@@ -12,7 +12,7 @@ telefonun duvar kağıdı yapılabilir.
   <img src="ornekler/saf-ebru-yogunluk-100.jpg" width="20%">
   <img src="ornekler/nesne-kedi-gece-paleti.jpg" width="20%">
   <img src="ornekler/nesne-gul-osmanli-paleti.jpg" width="20%">
-  <img src="ornekler/Bozkurt .png"width="20%">
+  <img src="ornekler/Bozkurt .png"width="20%" height=%130>
   <img src="ornekler/Gece Renk Paletiyle Üretilen Ebru Görselleri.png "width="20%">
 </p>
 
