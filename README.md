@@ -13,7 +13,7 @@ telefonun duvar kağıdı yapılabilir.
   <img src="ornekler/nesne-kedi-gece-paleti.jpg" width="20%">
   <img src="ornekler/nesne-gul-osmanli-paleti.jpg" width="20%">
   <img src="ornekler/Bozkurt .png"width="20%">
-  <img src="ornekler/Gece Renk Paletiyle Üretilen Ebru Görselleri.png .png"width="20%">
+  <img src="ornekler/Gece Renk Paletiyle Üretilen Ebru Görselleri.png "width="20%">
 </p>
 
 ## Nasıl çalışıyor
