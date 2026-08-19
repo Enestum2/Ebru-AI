@@ -1,0 +1,60 @@
+{% extends "taban.html" %}
+{% set sayfa = 'dogrulama' %}
+
+{% block baslik %}Ebru AI — E-posta onayı{% endblock %}
+{% block aciklama %}Ebru AI hesabının e-posta onayı.{% endblock %}
+
+{% block icerik %}
+
+{# E-postadaki bağlantı buraya düşüyor. Sayfa iki durumu da anlatıyor:
+   onay başarılıysa kullanıcıyı doğrudan üretime yönlendiriyor, değilse
+   ne yapması gerektiğini söylüyor (yeni bağlantı istemek için giriş). #}
+<section class="w-full min-h-[calc(100vh-80px)] flex items-center justify-center px-md py-lg">
+  <div class="w-full max-w-md ac gorundu">
+    <div class="rounded-xl bg-surface-container-lowest border border-white/5 shadow-2xl
+                p-md md:p-lg relative overflow-hidden text-center">
+      <div class="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] pointer-events-none
+                  {% if basarili %}bg-gold/10{% else %}bg-error/10{% endif %}"></div>
+
+      <div class="relative z-10 flex flex-col items-center gap-sm">
+        {% if basarili %}
+          <span class="material-symbols-outlined text-gold" style="font-size:56px;">
+            mark_email_read
+          </span>
+          <h1 class="font-headline-md text-headline-md text-on-surface">
+            E-posta adresin onaylandı
+          </h1>
+          <p class="font-body-md text-body-md text-on-surface-variant">
+            Hoş geldin{% if kullanici %}, {{ kullanici }}{% endif %}. Artık eser
+            üretebilirsin. Günlük üretim hakkın 3.
+          </p>
+          <a href="/#olustur"
+             class="altin-dugme mt-sm px-lg py-sm rounded-full font-label-md text-label-md
+                    uppercase tracking-wider">
+            <span class="relative z-10">Ebru üretmeye başla</span>
+          </a>
+        {% else %}
+          <span class="material-symbols-outlined text-error" style="font-size:56px;">
+            link_off
+          </span>
+          <h1 class="font-headline-md text-headline-md text-on-surface">
+            Bağlantı kullanılamadı
+          </h1>
+          <p class="font-body-md text-body-md text-on-surface-variant">
+            {{ mesaj }}
+          </p>
+          <a href="/giris"
+             class="mt-sm px-lg py-sm rounded-full bg-white/10 hover:bg-white/15
+                    text-on-surface font-label-md text-label-md transition-colors">
+            Giriş yap
+          </a>
+          <p class="font-label-sm text-label-sm text-outline mt-xs">
+            Giriş yaptıktan sonra yeni bir doğrulama bağlantısı isteyebilirsin.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

@@ -23,6 +23,50 @@
       </div>
 
       <form id="hesapForm" autocomplete="on" class="relative z-10 flex flex-col gap-sm">
+        {# Yalnızca kayıt kipinde görünen alanlar. hesap.js hem
+           görünürlüğü hem "required" özniteliğini birlikte açıp
+           kapatıyor: gizli bir zorunlu alan tarayıcıda gönderimi
+           kilitliyor ("invalid form control is not focusable") ve
+           hata kullanıcıya hiç görünmüyor. #}
+        <div id="kayitAlanlari" class="hidden flex-col gap-sm">
+          <div class="flex flex-row gap-sm">
+            <div class="flex-1 flex flex-col gap-xs">
+              <label for="ad" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+                Ad
+              </label>
+              <input type="text" id="ad" name="given-name" autocomplete="given-name"
+                     maxlength="40"
+                     class="w-full rounded-lg bg-surface-container-low border border-white/10
+                            focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                            px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+            </div>
+            <div class="flex-1 flex flex-col gap-xs">
+              <label for="soyad" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+                Soyad
+              </label>
+              <input type="text" id="soyad" name="family-name" autocomplete="family-name"
+                     maxlength="40"
+                     class="w-full rounded-lg bg-surface-container-low border border-white/10
+                            focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                            px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-xs">
+            <label for="eposta" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+              E-posta
+            </label>
+            <input type="email" id="eposta" name="email" autocomplete="email"
+                   maxlength="254" inputmode="email"
+                   class="w-full rounded-lg bg-surface-container-low border border-white/10
+                          focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                          px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+            <p class="font-label-sm text-label-sm text-outline">
+              Üretim yapabilmek için bu adresi onaylaman gerekiyor.
+            </p>
+          </div>
+        </div>
+
         <div class="flex flex-col gap-xs">
           <label for="kullaniciAdi" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
             Kullanıcı adı
@@ -58,7 +102,7 @@
         </button>
       </form>
 
-      <p class="relative z-10 text-center font-body-md text-body-md text-on-surface-variant mt-md">
+      <p id="gecisSatiri" class="relative z-10 text-center font-body-md text-body-md text-on-surface-variant mt-md">
         <span id="gecisMetin">Hesabın yok mu?</span>
         <a href="#" id="gecisBtn" class="text-tertiary hover:text-tertiary-fixed font-label-md text-label-md">Kayıt ol</a>
       </p>

@@ -1,0 +1,117 @@
+{% extends "taban.html" %}
+{% set sayfa = 'onay_bekleniyor' %}
+
+{% block baslik %}Ebru AI — E-postanı onayla{% endblock %}
+{% block aciklama %}Hesabını etkinleştirmek için e-posta adresini onayla.{% endblock %}
+
+{% block icerik %}
+
+{# Kayıttan sonra ve doğrulanmamış biri giriş yaptığında buraya
+   yönlendiriliyor. Ayrı bir sayfa olmasının sebebi: aynı kartın içinde
+   form ile onay panelini birlikte tutmak, birinin görünürlüğü
+   bozulduğunda kullanıcıya "kaydoldum" izlenimi veriyordu. #}
+<section class="w-full min-h-[calc(100vh-80px)] flex items-center justify-center px-md py-lg">
+  <div class="w-full max-w-md ac gorundu">
+    <div class="rounded-xl bg-surface-container-lowest border border-white/5 shadow-2xl
+                p-md md:p-lg relative overflow-hidden text-center">
+      <div class="absolute -top-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-[80px] pointer-events-none"></div>
+
+      <div class="relative z-10 flex flex-col items-center gap-sm">
+        <span class="material-symbols-outlined text-gold" style="font-size:56px;">
+          forward_to_inbox
+        </span>
+
+        <h1 class="font-headline-md text-headline-md text-on-surface">
+          E-postanı onayla
+        </h1>
+
+        <p class="font-body-md text-body-md text-on-surface-variant">
+          <span id="onayAdres" class="text-on-surface">E-posta adresine</span>
+          bir bağlantı gönderdik. Üretime başlamak için o bağlantıya tıkla.
+        </p>
+
+        <p class="font-label-sm text-label-sm text-outline">
+          Posta birkaç dakika içinde gelmezse gereksiz (spam) klasörüne bak.
+        </p>
+
+        <div id="onayDurum" class="hidden w-full p-sm rounded-lg
+                                   font-label-md text-label-md"></div>
+
+        <button type="button" id="tekrarGonderBtn"
+                class="mt-xs px-lg py-sm rounded-full bg-white/10 hover:bg-white/15
+                       text-on-surface font-label-md text-label-md transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed">
+          Bağlantıyı yeniden gönder
+        </button>
+
+        <a href="/" class="font-label-md text-label-md text-tertiary hover:text-tertiary-fixed mt-xs">
+          Ana sayfaya dön
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* Sayfa kendi başına çalışıyor: adresi sunucudan okuyor ve yeniden
+   gönderme isteğini yapıyor. hesap.js'e bağlı değil, çünkü orası
+   yalnızca giriş/kayıt formunu yönetiyor. */
+document.addEventListener('DOMContentLoaded', () => {
+  const adres = document.getElementById('onayAdres');
+  const durum = document.getElementById('onayDurum');
+  const dugme = document.getElementById('tekrarGonderBtn');
+
+  function durumGoster(mesaj, hataMi) {
+    durum.textContent = mesaj;
+    // Görünürlük SINIFLA yönetiliyor. "hidden" özniteliği Tailwind'in
+    // display sınıflarını ezemiyor; bu sayfanın önceki sürümünde tam
+    // olarak bu yüzden gizlenmesi gereken bölüm ekranda kalmıştı.
+    durum.classList.remove('hidden');
+    durum.classList.add('block');
+    durum.classList.toggle('bg-error/10', hataMi);
+    durum.classList.toggle('border', true);
+    durum.classList.toggle('border-error/30', hataMi);
+    durum.classList.toggle('text-error', hataMi);
+    durum.classList.toggle('bg-gold/10', !hataMi);
+    durum.classList.toggle('border-gold/30', !hataMi);
+    durum.classList.toggle('text-on-surface', !hataMi);
+  }
+
+  /* Giriş yapılmamışsa burada işi yok. */
+  if (!EbruHesap.girisYapildiMi()) {
+    location.href = '/giris';
+    return;
+  }
+
+  /* Adresi ve onay durumunu sunucudan al. Zaten onaylıysa burada
+     bekletmenin anlamı yok. */
+  fetch('/auth/me', { headers: EbruHesap.basliklar() })
+    .then((c) => c.json())
+    .then((v) => {
+      if (v.email_verified) {
+        location.href = '/#olustur';
+        return;
+      }
+      if (v.email) adres.textContent = v.email;
+    })
+    .catch(() => {});
+
+  dugme.addEventListener('click', async () => {
+    dugme.disabled = true;
+    try {
+      const cevap = await fetch('/auth/dogrulama-gonder', {
+        method: 'POST',
+        headers: EbruHesap.basliklar(),
+      });
+      const veri = await cevap.json().catch(() => ({}));
+      durumGoster(veri.message || 'Bir sorun oldu.', !cevap.ok);
+    } catch (hata) {
+      durumGoster('Sunucuya ulaşılamadı.', true);
+    } finally {
+      dugme.disabled = false;
+    }
+  });
+});
+</script>
+
+{% endblock %}

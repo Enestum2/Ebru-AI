@@ -60,11 +60,13 @@ from flask import (
     render_template,
     request,
     send_from_directory,
+    url_for,
 )
 from flask_cors import CORS
 import requests
 
 import kullanicilar
+import eposta as eposta_servisi
 # =====================================
 # FLASK AYARLARI
 # =====================================
@@ -108,6 +110,32 @@ app = Flask(
 )
 
 CORS(app)
+
+
+# =====================================
+# STATİK DOSYA SÜRÜMLEME
+# =====================================
+# Tarayıcı ve Cloudflare statik dosyaları 4 saat önbelleğe alıyor
+# (max-age=14400). Şablonlarda bunun için elle tutulan bir "?v=5"
+# vardı; sürüm artırmak unutulunca kullanıcılar eski JS ile kalıyor ve
+# ortaya "kod doğru ama site eski davranıyor" gibi teşhisi zor bir
+# durum çıkıyor. Bir kez yaşandı ve yarım saat yedi.
+#
+# Sürüm artık dosyanın değişiklik zamanından üretiliyor: dosya
+# değişince adres de değişiyor, kimsenin bir şey hatırlaması
+# gerekmiyor.
+@app.context_processor
+def _statik_yardimcisi():
+    def statik(dosya):
+        yol = os.path.join(app.static_folder or "", dosya)
+        try:
+            damga = int(os.path.getmtime(yol))
+        except OSError:
+            # Dosya yoksa sürümsüz döndür; şablon yine de çalışsın.
+            damga = 0
+        return "%s?v=%d" % (url_for("static", filename=dosya), damga)
+
+    return {"statik": statik}
 # =====================================
 # STABLE DIFFUSION BAĞLANTI AYARLARI
 # =====================================
@@ -119,10 +147,20 @@ CORS(app)
 # POST /register-backend ile buraya bildirir. Adres bellekte tutulur,
 # arka planda çalışan bir sağlık kontrolü ayakta olup olmadığını izler.
 
-LOCAL_FALLBACK_URL = (
+# Site GPU'dan ayri bir makinede calistiginda (bkz. UZAK URETIM notu)
+# bu makinede A1111 yok; 30 saniyede bir 127.0.0.1:7860'i yoklamanin
+# anlami kalmiyor. Deger "0" verilirse yerel yedek tamamen devre disi
+# kalir ve /health yalnizca kayitli uzak sunucuya bakar.
+_yerel_sd_ayari = (
     os.environ.get("EBRU_LOCAL_SD_URL")
     or os.environ.get("SD_LOCAL_URL")
     or "http://127.0.0.1:7860"
+).strip()
+
+LOCAL_FALLBACK_URL = (
+    None
+    if _yerel_sd_ayari.lower() in ("0", "yok", "kapali", "kapalı")
+    else _yerel_sd_ayari
 )
 
 # Colab'ın kendini kaydederken göndereceği gizli anahtar.
@@ -214,7 +252,7 @@ def refresh_health():
         remote_url = _state["remote_url"]
 
     remote_ok = probe(remote_url) if remote_url else False
-    local_ok = probe(LOCAL_FALLBACK_URL)
+    local_ok = probe(LOCAL_FALLBACK_URL) if LOCAL_FALLBACK_URL else False
 
     with _state_lock:
         _state["remote_ok"] = remote_ok
@@ -370,11 +408,19 @@ def check_rate_limit(kimlik, kullanici=None):
         if _yonetici_mi(kullanici.get("kullanici_adi")):
             return True, None, None
 
+        # Kişiye özel hak varsa o geçerli; yoksa genel değer.
+        hak = _gunluk_hak(kullanici)
         kullanilan = kullanicilar.gunluk_sayi(kullanici["id"])
-        if kullanilan >= DAILY_LIMIT:
+        if kullanilan >= hak:
+            if hak == 0:
+                return (
+                    False,
+                    "Bu hesap için üretim kapalı.",
+                    None,
+                )
             return (
                 False,
-                f"Günlük {DAILY_LIMIT} üretim hakkın doldu. "
+                f"Günlük {hak} üretim hakkın doldu. "
                 "Yarın tekrar deneyebilirsin.",
                 None,
             )
@@ -1485,22 +1531,167 @@ def oturum_kullanicisi():
     return None
 
 
+def _dogrulama_postasi_yolla(oturum_anahtari):
+    """Oturum sahibine doğrulama bağlantısı gönderir.
+
+    Döner: True (gönderildi) / False (gönderilemedi). Hata kullanıcıya
+    değil günlüğe yazılıyor; Resend'in cevabı adres hakkında bilgi
+    sızdırabilir.
+    """
+    kullanici = kullanicilar.oturumu_coz(oturum_anahtari)
+    if not kullanici or not kullanici.get("eposta"):
+        return False
+
+    if not eposta_servisi.yapilandirildi_mi():
+        print("⚠️  EBRU_RESEND_API_KEY yok; doğrulama postası gönderilemedi.")
+        return False
+
+    kod, bekle = kullanicilar.dogrulama_kodu_olustur(
+        kullanici["id"], kullanici["eposta"]
+    )
+    if not kod:
+        print(f"⏳ Doğrulama postası çok sık istendi ({bekle} sn kaldı)")
+        return False
+
+    basarili, hata = eposta_servisi.dogrulama_postasi_gonder(
+        kullanici["eposta"], kullanici["kullanici_adi"], kod
+    )
+    if basarili:
+        print(f"✉️  Doğrulama postası gönderildi: {kullanici['kullanici_adi']}")
+    else:
+        print(f"✉️  Doğrulama postası GÖNDERİLEMEDİ: {hata}")
+    return basarili
+
+
+@app.route("/auth/dogrulama-gonder", methods=["POST"])
+def auth_dogrulama_gonder():
+    """Doğrulama bağlantısını yeniden gönderir."""
+    baslik = request.headers.get("Authorization", "")
+    oturum_anahtari = baslik[7:].strip() if baslik.startswith("Bearer ") else ""
+
+    kullanici = kullanicilar.oturumu_coz(oturum_anahtari)
+    if not kullanici:
+        return jsonify({
+            "status": "error",
+            "message": "Oturum açman gerekiyor",
+        }), 401
+
+    if kullanici.get("eposta_dogrulandi"):
+        return jsonify({
+            "status": "success",
+            "message": "E-posta adresin zaten onaylı.",
+            "email_verified": True,
+        })
+
+    if not kullanici.get("eposta"):
+        return jsonify({
+            "status": "error",
+            "message": (
+                "Hesabında kayıtlı e-posta adresi yok. "
+                "Yeni bir hesap açman gerekiyor."
+            ),
+        }), 400
+
+    if not eposta_servisi.yapilandirildi_mi():
+        return jsonify({
+            "status": "error",
+            "message": (
+                "Posta servisi şu anda yapılandırılmamış. "
+                "Lütfen biraz sonra tekrar dene."
+            ),
+        }), 503
+
+    kod, bekle = kullanicilar.dogrulama_kodu_olustur(
+        kullanici["id"], kullanici["eposta"]
+    )
+    if not kod:
+        return jsonify({
+            "status": "error",
+            "message": f"Çok sık istedin. {bekle} saniye sonra tekrar dene.",
+            "retry_after": bekle,
+        }), 429
+
+    basarili, hata = eposta_servisi.dogrulama_postasi_gonder(
+        kullanici["eposta"], kullanici["kullanici_adi"], kod
+    )
+    if not basarili:
+        print(f"✉️  Yeniden gönderim başarısız: {hata}")
+        return jsonify({
+            "status": "error",
+            "message": "Posta gönderilemedi. Biraz sonra tekrar dene.",
+        }), 502
+
+    return jsonify({
+        "status": "success",
+        "message": "Doğrulama bağlantısı e-posta adresine gönderildi.",
+    })
+
+
+@app.route("/onay-bekleniyor")
+def onay_bekleniyor():
+    """Kayıttan sonra gelinen sayfa: e-postanı onayla.
+
+    Yetki denetimi yok; sayfa kendisi oturumu kontrol edip gerekirse
+    girişe yönlendiriyor. Tarayıcı adres çubuğundan Authorization
+    başlığı gönderemediği için sunucu tarafında denetlemek zaten
+    mümkün değil (aynı sebeple /admin de böyle çalışıyor).
+    """
+    return render_template("onay_bekleniyor.html")
+
+
+@app.route("/dogrula/<token>", methods=["GET"])
+def dogrula(token):
+    """E-postadaki bağlantı buraya geliyor.
+
+    Tarayıcıdan açıldığı için JSON değil sayfa döndürüyor.
+    """
+    try:
+        ad = kullanicilar.dogrulama_kodu_kullan(token)
+    except kullanicilar.KayitHatasi as e:
+        return render_template(
+            "dogrulama.html", basarili=False, mesaj=str(e)
+        ), 400
+
+    print(f"✅ E-posta doğrulandı: {ad}")
+    return render_template("dogrulama.html", basarili=True, kullanici=ad)
+
+
 @app.route("/auth/register", methods=["POST"])
 def auth_register():
     data = request.get_json(silent=True) or {}
     try:
         token, ad = kullanicilar.kayit_ol(
-            data.get("username"), data.get("password")
+            data.get("username"),
+            data.get("password"),
+            # 19 Ağustos 2026'da zorunlu oldu. Eski mobil sürüm bu üç
+            # alanı göndermiyor; kayit_ol o durumu anlatan ve kullanıcıyı
+            # siteye yönlendiren bir mesaj döndürüyor.
+            ad=data.get("first_name"),
+            soyad=data.get("last_name"),
+            eposta=data.get("email"),
         )
     except kullanicilar.KayitHatasi as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
     print(f"👤 Yeni hesap: {ad}")
+
+    # Doğrulama postası gönderiliyor.
+    #
+    # Gönderim başarısız olsa bile kayıt geri alınmıyor: hesap açıldı,
+    # kullanıcı giriş yapabiliyor ve panelden yeniden gönderim
+    # isteyebiliyor. Posta servisindeki geçici bir arıza yüzünden
+    # kullanıcıyı hesapsız bırakmanın anlamı yok.
+    gonderildi = _dogrulama_postasi_yolla(token)
+
     return jsonify({
         "status": "success",
         "token": token,
         "username": ad,
         "is_admin": _yonetici_mi(ad),
+        # Hesap açıldı ama üretim için e-posta onayı gerekiyor.
+        # Ön yüz bu bilgiyle "e-postanı onayla" ekranını gösteriyor.
+        "email_verified": False,
+        "verification_sent": gonderildi,
     }), 201
 
 
@@ -1515,11 +1706,19 @@ def auth_login():
         return jsonify({"status": "error", "message": str(e)}), 401
 
     print(f"🔑 Giriş: {ad}")
+
+    # Doğrulama durumu girişten sonra okunuyor. giris_yap yalnızca
+    # (token, ad) döndürüyor ve imzasını değiştirmek mobil tarafta da
+    # karşılığı olan bir iş; oturumu çözmek tek ek sorguyla aynı bilgiyi
+    # veriyor.
+    oturum = kullanicilar.oturumu_coz(token) or {}
+
     return jsonify({
         "status": "success",
         "token": token,
         "username": ad,
         "is_admin": _yonetici_mi(ad),
+        "email_verified": bool(oturum.get("eposta_dogrulandi")),
     })
 
 
@@ -1537,8 +1736,10 @@ def auth_me():
         "status": "success",
         "username": kullanici["kullanici_adi"],
         "daily_used": kullanicilar.gunluk_sayi(kullanici["id"]),
-        "daily_limit": DAILY_LIMIT,
+        "daily_limit": _gunluk_hak(kullanici),
         "is_admin": _yonetici_mi(kullanici["kullanici_adi"]),
+        "email": kullanici.get("eposta"),
+        "email_verified": bool(kullanici.get("eposta_dogrulandi")),
     })
 
 
@@ -1592,6 +1793,35 @@ def register_backend():
     })
 
 
+@app.route("/unregister-backend", methods=["POST"])
+def unregister_backend():
+    """
+    Uretim makinesi kapanirken kaydini siler.
+
+    Bu uc olmadan da sistem dogru calisir: saglik kontrolu 30 saniye
+    icinde tunelin dustugunu fark eder. Ama kullanicinin gordugu sey
+    "uretimi kapattim, site hala acik diyor" oluyordu. Temiz kapanista
+    durum aninda guncellensin diye eklendi.
+    """
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+
+    if not secrets.compare_digest(str(token), REGISTER_TOKEN):
+        return jsonify({
+            "status": "error",
+            "message": "Geçersiz token"
+        }), 403
+
+    with _state_lock:
+        _state["remote_url"] = None
+        _state["remote_ok"] = False
+        _state["registered_at"] = None
+        _state["last_check"] = time.time()
+
+    print("📴 Uretim makinesi kaydini sildi")
+    return jsonify({"status": "success"})
+
+
 @app.route("/progress", methods=["GET"])
 def progress():
     """
@@ -1630,9 +1860,58 @@ def progress():
 ADMIN_KULLANICI = os.environ.get("EBRU_ADMIN_USER", "boss")
 
 
-def _yonetici_mi(kullanici_adi):
-    """Bu kullanıcı adı yönetici mi."""
+def _kurucu_yonetici_mi(kullanici_adi):
+    """Ortam değişkeninde tanımlı, yetkisi alınamayan yönetici mi."""
     return (kullanici_adi or "").lower() == ADMIN_KULLANICI.lower()
+
+
+def _yonetici_mi(kullanici_adi):
+    """Bu kullanıcı adı yönetici mi.
+
+    İki kaynak var:
+      1. EBRU_ADMIN_USER ile eşleşen hesap — HER ZAMAN yönetici,
+         yetkisi panelden alınamıyor.
+      2. Veritabanındaki `yonetici` bayrağı — panelden verilip alınıyor.
+
+    Birinci madde kilitlenmeye karşı sigorta: panelden herkesin yetkisi
+    alınsa bile o hesapla girilebiliyor. Aksi halde düzeltmenin tek yolu
+    sunucuya SSH ile bağlanıp veritabanını elle düzenlemek olurdu.
+    """
+    if _kurucu_yonetici_mi(kullanici_adi):
+        return True
+    return kullanicilar.yonetici_mi(kullanici_adi)
+
+
+def _gunluk_hak(kullanici):
+    """Bu kullanıcı için geçerli günlük üretim hakkı.
+
+    Kişisel hak NULL ise genel değer geçerli. 0 geçerli bir değer
+    (üretimi kapatır), bu yüzden "or" ile varsayılana düşülmüyor.
+    """
+    if not kullanici:
+        return DAILY_LIMIT
+    kisisel = kullanici.get("gunluk_limit")
+    return DAILY_LIMIT if kisisel is None else kisisel
+
+
+# E-postasını onaylamamış hesap üretim yapamaz (karar: 19 Ağustos 2026).
+#
+# Gerekçe kapasite: tek bir GPU var ve üretimler sırayla çalışıyor.
+# Doğrulanmamış hesapların kuyruğa girmesi yalnızca onları değil,
+# sıradaki herkesi bekletir.
+#
+# Yönetici bu denetime takılmıyor; göç sırasında doğrulanmış olarak
+# işaretleniyor ve e-postası hiç olmayacak.
+DOGRULAMA_MESAJI = (
+    "Üretim yapabilmek için e-posta adresini onaylaman gerekiyor."
+)
+
+
+def _dogrulanmamis_mi(kullanici):
+    """Hesap üretimden men edilmeli mi. Döner: True/False."""
+    if not kullanici:
+        return False
+    return not kullanici.get("eposta_dogrulandi")
 
 
 def _yonetici_yetkili():
@@ -1706,13 +1985,133 @@ def admin_kullanicilar():
 
     liste = kullanicilar.hepsi()
     for k in liste:
-        k["yonetici"] = _yonetici_mi(k["kullanici_adi"])
+        # Veritabanı bayrağı ile ortam değişkenindeki hesap birleştiriliyor.
+        kurucu = _kurucu_yonetici_mi(k["kullanici_adi"])
+        k["yonetici"] = bool(k.get("yonetici")) or kurucu
+        # Panel bu hesabın yetki düğmesini kapalı gösteriyor.
+        k["kurucu_yonetici"] = kurucu
+        # Kişisel hak yoksa hangi değerin geçerli olduğunu da bildir.
+        k["gecerli_limit"] = (
+            DAILY_LIMIT if k.get("gunluk_limit") is None else k["gunluk_limit"]
+        )
 
     return jsonify({
         "status": "success",
         "kullanicilar": liste,
         "gunluk_limit": DAILY_LIMIT,
     })
+
+
+def _yonetim_hedefi(kullanici_id):
+    """Yönetim işlemi için hedef kullanıcıyı bulur.
+
+    Döner: (kullanici, hata_cevabi). Hata varsa kullanici None.
+    """
+    hedef = kullanicilar.kullanici_getir(kullanici_id)
+    if not hedef:
+        return None, (jsonify({
+            "status": "error",
+            "message": "Kullanıcı bulunamadı.",
+        }), 404)
+    return hedef, None
+
+
+@app.route("/admin/kullanicilar/<int:kullanici_id>/yonetici", methods=["POST"])
+def admin_yonetici_ayarla(kullanici_id):
+    """Yönetici yetkisini verir ya da alır."""
+    if not _yonetici_yetkili():
+        return jsonify({"status": "error", "message": "Yetkisiz"}), 403
+
+    hedef, hata = _yonetim_hedefi(kullanici_id)
+    if hata:
+        return hata
+
+    data = request.get_json(silent=True) or {}
+    deger = bool(data.get("yonetici"))
+
+    # Kurucu yöneticinin yetkisi alınamaz: panelden herkesin yetkisi
+    # alınıp kimsenin giremediği bir duruma düşmeyi engelliyor.
+    if _kurucu_yonetici_mi(hedef["kullanici_adi"]) and not deger:
+        return jsonify({
+            "status": "error",
+            "message": (
+                f"{hedef['kullanici_adi']} kurucu yönetici; yetkisi "
+                "panelden alınamaz. Bu, paneli tamamen kaybetmeyi önlüyor."
+            ),
+        }), 400
+
+    try:
+        kullanicilar.yonetici_ayarla(kullanici_id, deger)
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"🛡️  Yetki {'verildi' if deger else 'alındı'}: "
+          f"{hedef['kullanici_adi']}")
+    return jsonify({"status": "success", "yonetici": deger})
+
+
+@app.route("/admin/kullanicilar/<int:kullanici_id>/limit", methods=["POST"])
+def admin_limit_ayarla(kullanici_id):
+    """Kişiye özel günlük üretim hakkını ayarlar."""
+    if not _yonetici_yetkili():
+        return jsonify({"status": "error", "message": "Yetkisiz"}), 403
+
+    hedef, hata = _yonetim_hedefi(kullanici_id)
+    if hata:
+        return hata
+
+    data = request.get_json(silent=True) or {}
+    deger = data.get("limit")
+    # Boş gönderilirse kişisel hak kalkar, genel değer geçerli olur.
+    if deger in ("", None):
+        deger = None
+
+    try:
+        kullanicilar.limit_ayarla(kullanici_id, deger)
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"🎚️  Günlük hak: {hedef['kullanici_adi']} → "
+          f"{'genel' if deger is None else deger}")
+    return jsonify({
+        "status": "success",
+        "gunluk_limit": deger,
+        "gecerli_limit": DAILY_LIMIT if deger is None else deger,
+    })
+
+
+@app.route("/admin/kullanicilar/<int:kullanici_id>", methods=["DELETE"])
+def admin_kullanici_sil(kullanici_id):
+    """Hesabı ve ona bağlı bütün kayıtları siler."""
+    if not _yonetici_yetkili():
+        return jsonify({"status": "error", "message": "Yetkisiz"}), 403
+
+    hedef, hata = _yonetim_hedefi(kullanici_id)
+    if hata:
+        return hata
+
+    if _kurucu_yonetici_mi(hedef["kullanici_adi"]):
+        return jsonify({
+            "status": "error",
+            "message": f"{hedef['kullanici_adi']} kurucu yönetici; silinemez.",
+        }), 400
+
+    # Kendi hesabını silmek oturumu anında geçersiz kılar ve panelden
+    # düşersin. Kaza eseri olmasın diye engelleniyor.
+    kendisi = oturum_kullanicisi()
+    if kendisi and kendisi["id"] == kullanici_id:
+        return jsonify({
+            "status": "error",
+            "message": "Kendi hesabını panelden silemezsin.",
+        }), 400
+
+    try:
+        kullanicilar.sil(kullanici_id)
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"🗑️  Hesap silindi: {hedef['kullanici_adi']}")
+    return jsonify({"status": "success"})
 
 
 @app.route("/admin", methods=["GET"])
@@ -1876,11 +2275,27 @@ _lightning_path = os.path.join(
     f"{LIGHTNING_LORA}.safetensors",
 )
 
-# Dosya varsa otomatik devreye girer; EBRU_LIGHTNING=0 ile kapatılabilir.
-LIGHTNING_ENABLED = (
-    os.path.exists(_lightning_path)
-    and os.environ.get("EBRU_LIGHTNING", "1") == "1"
-)
+# Dosya varsa otomatik devreye girer.
+#
+# DIKKAT — uzak uretimde bu denetim tek basina yaniltici. Site GPU'dan
+# ayri bir makinede calistiginda LoRA dosyasi burada degil, A1111'in
+# yanindadir. Diske bakan eski denetim o durumda "yok" der, hizlandirma
+# sessizce kapanir: adim 4 yerine 16, CFG 1.8 yerine 8.5 olur. Yavaslama
+# bir yana, Lightning LoRA'si yuksek CFG ile goruntuyu yakar; yani hata
+# kendini cokme olarak degil bozuk cikti olarak gosterir.
+#
+# Bu yuzden EBRU_LIGHTNING artik iki yonlu:
+#   "1" -> dosyaya bakmadan ac (GPU'nun oldugu makinede var kabul edilir)
+#   "0" -> kapat
+#   verilmezse -> eski davranis: dosya varsa ac
+_lightning_secimi = os.environ.get("EBRU_LIGHTNING")
+
+if _lightning_secimi == "1":
+    LIGHTNING_ENABLED = True
+elif _lightning_secimi == "0":
+    LIGHTNING_ENABLED = False
+else:
+    LIGHTNING_ENABLED = os.path.exists(_lightning_path)
 
 if LIGHTNING_ENABLED:
     # Ölçüm: 4 adım ~94 sn, 6 adım ~116 sn. LoRA zaten 4 adım için
@@ -1991,6 +2406,20 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                         "Lütfen biraz sonra tekrar dene."
                     ),
                 }, 503
+        # ------------------------------
+        # E-POSTA ONAYI
+        # ------------------------------
+        # /jobs bunu kuyruğa almadan önce zaten denetliyor. Burası
+        # senkron /generate ucunu ve doğrudan çağrıları kapsıyor;
+        # denetim tek yerde bırakılırsa öbür yol açık kalırdı.
+        if _dogrulanmamis_mi(kullanici):
+            print(f"✉️  Onaysız hesap üretim denedi: {kimlik}")
+            return {
+                "status": "error",
+                "message": DOGRULAMA_MESAJI,
+                "email_verified": False,
+            }, 403
+
         # ------------------------------
         # KULLANIM SINIRI
         # ------------------------------
@@ -2412,6 +2841,35 @@ def create_job():
             "message": "Oturum açman gerekiyor",
         }), 401
 
+    # Kuyruğa alınmadan önce bakılıyor: iş numarası verip sonra
+    # reddetmek kullanıcıyı boşuna bekletirdi.
+    if _dogrulanmamis_mi(kullanici):
+        return jsonify({
+            "status": "error",
+            "message": DOGRULAMA_MESAJI,
+            "email_verified": False,
+        }), 403
+
+    # Günlük hak da burada bir kez okunuyor. Asıl denetim ve sayaç
+    # artışı üretim sırasında check_rate_limit'te; burası YALNIZCA
+    # okuma yapıyor, yoksa hak iki kez düşerdi.
+    #
+    # Bunun eklenme sebebi: yönetici panelden bir hesabın hakkını 0
+    # yapabiliyor ("üretim kapalı"). O hesap istek attığında iş numarası
+    # alıp sıraya giriyor, reddi ancak üretim sırası gelince görüyordu.
+    if not _yonetici_mi(kullanici["kullanici_adi"]):
+        hak = _gunluk_hak(kullanici)
+        if kullanicilar.gunluk_sayi(kullanici["id"]) >= hak:
+            return jsonify({
+                "status": "error",
+                "message": (
+                    "Bu hesap için üretim kapalı."
+                    if hak == 0
+                    else f"Günlük {hak} üretim hakkın doldu. "
+                         "Yarın tekrar deneyebilirsin."
+                ),
+            }), 429
+
     data = request.get_json(silent=True) or {}
     kimlik = kullanici["kullanici_adi"]
     # İstek bağlamı thread'e taşınamaz, şimdi okunmalı.
@@ -2568,6 +3026,22 @@ def start_health_monitor():
 # Modül içe aktarıldığında da başlasın (gunicorn vb. ile çalıştırıldığında
 # __main__ bloğu çalışmaz).
 start_health_monitor()
+
+
+# Asagidaki iki uyari eskiden yalnizca __main__ blogunda basiliyordu.
+# Sunucuda uygulama gunicorn ile calisiyor ve o blok hic islemiyor; en
+# kritik iki yanlis yapilandirma da tam orada sessiz kaliyordu.
+if _TOKEN_AUTO_GENERATED:
+    print("[UYARI] EBRU_REGISTER_TOKEN verilmedi; bu acilisa ozel")
+    print("        rastgele bir anahtar uretildi. Surec her yeniden")
+    print("        baslatildiginda degisecegi icin uretim makinesi")
+    print("        kaydolamaz. Sunucuda mutlaka sabitle.")
+    print(f"        Gecerli anahtar: {REGISTER_TOKEN}")
+
+if LOCAL_FALLBACK_URL is None and not LIGHTNING_ENABLED:
+    print("[UYARI] Yerel GPU kapali ve Lightning hizlandirma da kapali.")
+    print("        Uzak uretimde EBRU_LIGHTNING=1 verilmezse adim/CFG")
+    print("        degerleri yavas ve bozuk ciktiya yol acar.")
 
 
 if __name__ == "__main__":

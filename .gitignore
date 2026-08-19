@@ -11,6 +11,20 @@
 .env
 .env.local
 
+# Üretim işçisinin kayıt anahtarı. Adı .bat olduğu için yukarıdaki
+# desenlerin hiçbirine uymuyor, elle eklendi.
+uretim_ayarlar.bat
+server/uretim_ayarlar.bat
+
+# uretim_isci.py'nin olusturdugu bos tunel yapilandirmasi
+uretim_tunel_config.yml
+server/uretim_tunel_config.yml
+
+# Sunucudan indirilen veritabani kopyalari.
+# ICINDE SIFRE HASH'LERI VE HESAP BILGILERI VAR.
+veritabani_yedek/
+server/veritabani_yedek/
+
 # Tünel ve sunucu günlükleri (IP adresi ve istek içeriği barındırır)
 *.log
 

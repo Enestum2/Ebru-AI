@@ -152,6 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const gonderBtn = document.getElementById('gonderBtn');
   const hataKutusu = document.getElementById('hataKutusu');
   const kayitIpucu = document.getElementById('kayitIpucu');
+  const kayitAlanlari = document.getElementById('kayitAlanlari');
+
+  // Kayit kipinde zorunlu olan alanlar. Giris kipinde hem gizleniyor
+  // hem de "required" kaldiriliyor; gizli bir zorunlu alan tarayicida
+  // gonderimi sessizce kilitliyor.
+  const kayitGirdileri = ['ad', 'soyad', 'eposta']
+    .map((k) => document.getElementById(k))
+    .filter(Boolean);
 
   function kipiUygula() {
     baslik.textContent = kayitKipi ? 'Hesap oluştur' : 'Giriş yap';
@@ -164,6 +172,20 @@ document.addEventListener('DOMContentLoaded', () => {
     gecisBtn.textContent = kayitKipi ? 'Giriş yap' : 'Kayıt ol';
     kayitIpucu.hidden = !kayitKipi;
     hataKutusu.hidden = true;
+
+    // Gorunurluk SINIFLA yonetiliyor: "hidden" OZNITELIGI
+    // Tailwind'in display siniflarini ezemiyor (tarayici
+    // varsayilani daha dusuk oncelikli). Olcumle goruldu:
+    // oznitelik true iken hesaplanan display hala "flex"ti,
+    // yani alanlar giris kipinde de ekranda kaliyordu.
+    if (kayitAlanlari) {
+      kayitAlanlari.classList.toggle('hidden', !kayitKipi);
+      kayitAlanlari.classList.toggle('flex', kayitKipi);
+    }
+    kayitGirdileri.forEach((girdi) => {
+      girdi.required = kayitKipi;
+      if (!kayitKipi) girdi.value = '';
+    });
 
     document.getElementById('sifre').autocomplete =
       kayitKipi ? 'new-password' : 'current-password';
@@ -186,6 +208,14 @@ document.addEventListener('DOMContentLoaded', () => {
       password: document.getElementById('sifre').value,
     };
 
+    // Ad, soyad ve e-posta yalnizca kayitta gonderiliyor. Sunucu
+    // bunlari zorunlu tutuyor; giriste beklemiyor.
+    if (kayitKipi) {
+      govde.first_name = document.getElementById('ad').value.trim();
+      govde.last_name = document.getElementById('soyad').value.trim();
+      govde.email = document.getElementById('eposta').value.trim();
+    }
+
     try {
       const cevap = await fetch(kayitKipi ? '/auth/register' : '/auth/login', {
         method: 'POST',
@@ -196,6 +226,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (cevap.ok && veri.token) {
         EbruHesap.kaydet(veri.token, veri.username);
+
+        // E-postasi onaylanmamis hesap uretim yapamiyor; onu
+        // yonlendirmek yerine onay ekraninda tutuyoruz.
+        // Dogrulanmamis hesap uretim yapamiyor; onu Olustur
+        // ekranina gondermek 403 ile sonuclanirdi. Ne yapmasi
+        // gerektigini anlatan sayfaya yonlendiriliyor.
+        if (veri.email_verified === false) {
+          location.href = '/onay-bekleniyor';
+          return;
+        }
+
         // Giriş sayfasına nereden gelindiyse oraya dön.
         const hedef = new URLSearchParams(location.search).get('devam');
         location.href = hedef && hedef.startsWith('/') ? hedef : '/';
