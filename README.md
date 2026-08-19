@@ -9,9 +9,10 @@ eğittiğimiz ebru LoRA'sı ile SDXL üzerinde üretir. Sonuç doğrudan
 telefonun duvar kağıdı yapılabilir.
 
 <p align="center">
-  <img src="ornekler/saf-ebru-yogunluk-100.jpg" width="30%">
-  <img src="ornekler/nesne-kedi-gece-paleti.jpg" width="30%">
-  <img src="ornekler/nesne-gul-osmanli-paleti.jpg" width="30%">
+  <img src="ornekler/saf-ebru-yogunluk-100.jpg" width="25%">
+  <img src="ornekler/nesne-kedi-gece-paleti.jpg" width="25%">
+  <img src="ornekler/nesne-gul-osmanli-paleti.jpg" width="25%">
+  <img src="ornekler/Bozkurt .png"width="25%">
 </p>
 
 ## Nasıl çalışıyor
