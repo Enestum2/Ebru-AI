@@ -37,6 +37,26 @@ OTURUM_SURESI = int(os.environ.get("EBRU_OTURUM_SURESI", str(90 * 24 * 3600)))
 KULLANICI_ADI_DESENI = re.compile(r'^[a-zA-Z0-9_.]{3,24}$')
 EN_KISA_SIFRE = 6
 
+# Ad ve soyadda kabul edilen harfler.
+#
+# Türkçe harfler tek bir aralıkta değil: ç, ö, ü Latin-1'de ama
+# ğ, ı, ş Latin Extended-A'da duruyor. "A-Za-zÀ-ÿ" gibi genel bir
+# aralık bu üçünü kaçırır ve "Işık" ya da "Çağla" reddedilirdi.
+# Bu yüzden hepsi tek tek yazılı.
+_AD_HARFLERI = "A-Za-zÇÖÜçöüĞğİıŞş"
+
+# İlk karakter harf olmalı; devamında boşluk, kesme işareti ve tire de
+# serbest ("Ayşe Nur", "O'Brien", "Kara-Demir"). Toplam 2-40 karakter.
+AD_DESENI = re.compile(
+    "^[%s][%s'\\- ]{1,39}$" % (_AD_HARFLERI, _AD_HARFLERI)
+)
+
+# E-posta için kasıtlı olarak sade bir denetim. RFC'ye tam uyan desen
+# okunamayacak kadar uzun ve pratikte fayda getirmiyor; adresin gerçek
+# olup olmadığını zaten doğrulama postası belirleyecek. Buradaki amaç
+# yazım hatasını ve boş girdiyi elemek.
+EPOSTA_DESENI = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")
+
 _lock = threading.Lock()
 
 
@@ -62,8 +82,109 @@ def _baglan():
         baglanti.close()
 
 
+# =====================================
+# ŞEMA GÖÇLERİ
+# =====================================
+# Hesap tablosu başta yalnızca kullanıcı adı ve şifre tutuyordu.
+# E-posta doğrulaması ve Google ile giriş için alan eklemek gerekti.
+#
+# Göçler bir sürüm numarasına değil, "sütun gerçekten var mı"
+# sorusuna bakıyor. Sürüm numarası ayrı bir yerde tutulur ve elle
+# müdahale edilmiş bir veritabanında gerçekle uyuşmayabilir;
+# PRAGMA table_info ise her zaman doğruyu söylüyor. Bu yöntem aynı
+# zamanda göçün kaç kez çalıştığından bağımsız — her açılışta
+# çağrılması sorun değil.
+YENI_SUTUNLAR = (
+    ("eposta", "TEXT"),
+    ("ad", "TEXT"),
+    ("soyad", "TEXT"),
+    # 0/1. Doğrulanmamış hesap üretim yapamıyor (karar: 19 Ağustos).
+    ("eposta_dogrulandi", "INTEGER NOT NULL DEFAULT 0"),
+    # 'sifre' ya da 'google'. Şifre sıfırlama gibi akışların hangi
+    # hesapta anlamlı olduğunu bilmek için gerekiyor.
+    ("kayit_yolu", "TEXT NOT NULL DEFAULT 'sifre'"),
+    # Google hesabının değişmeyen kimliği. Kişinin e-postası
+    # değişebiliyor, bu değişmiyor; eşleştirmenin dayanağı bu olmalı.
+    ("google_sub", "TEXT"),
+    # Yönetici yetkisi. Önceden yalnızca EBRU_ADMIN_USER ile eşleşen
+    # kullanıcı adı yönetici sayılıyordu; artık panelden de verilebiliyor.
+    # O ortam değişkenindeki hesap her koşulda yönetici kalıyor (bkz.
+    # app.py: _yonetici_mi) — panelden herkesin yetkisi alınıp kimsenin
+    # giremediği bir duruma düşülmesin diye.
+    ("yonetici", "INTEGER NOT NULL DEFAULT 0"),
+    # Kişiye özel günlük üretim hakkı. NULL ise genel değer (DAILY_LIMIT)
+    # geçerli. 0 yazılırsa o kişi üretim yapamaz — bilinçli bir seçenek.
+    ("gunluk_limit", "INTEGER"),
+)
+
+
+def _goc_uygula(db):
+    """Eksik sütun, indeks ve tabloları tamamlar. Tekrar çalışabilir."""
+    mevcut = {satir["name"] for satir in db.execute(
+        "PRAGMA table_info(kullanicilar)"
+    )}
+
+    for ad, tanim in YENI_SUTUNLAR:
+        if ad not in mevcut:
+            # Sütun adları kod içinde sabit; dışarıdan veri gelmiyor.
+            db.execute(
+                "ALTER TABLE kullanicilar ADD COLUMN %s %s" % (ad, tanim)
+            )
+
+    # UNIQUE kısıtı ALTER TABLE ADD COLUMN ile verilemiyor; ayrı bir
+    # benzersiz indeks olarak kuruluyor.
+    #
+    # Burada SQLite'ın bir davranışı işimize yarıyor: benzersiz
+    # indekste NULL'lar birbirinden FARKLI sayılıyor. Yani e-postası
+    # olmayan birden fazla hesap yan yana durabiliyor. Yönetici
+    # hesabının e-postasız kalabilmesi bu sayede mümkün.
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS kullanici_eposta "
+        "ON kullanicilar(eposta)"
+    )
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS kullanici_google "
+        "ON kullanicilar(google_sub)"
+    )
+
+    # E-posta doğrulama bağlantıları.
+    #
+    # Adres satırın içinde ayrıca tutuluyor. Sebep: kullanıcı bağlantıya
+    # tıklamadan önce e-postasını değiştirirse, eski bağlantı YENİ
+    # adresi doğrulamamalı. Doğrulama, gönderildiği adrese aittir.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS dogrulama_kodlari (
+            token          TEXT PRIMARY KEY,
+            kullanici_id   INTEGER NOT NULL,
+            eposta         TEXT NOT NULL,
+            olusturma      REAL NOT NULL,
+            son_gecerlilik REAL NOT NULL,
+            kullanildi     INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (kullanici_id) REFERENCES kullanicilar(id)
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS dogrulama_kullanici "
+        "ON dogrulama_kodlari(kullanici_id)"
+    )
+
+    # Yönetici hesabı doğrulamadan muaf (karar: 19 Ağustos 2026).
+    # E-postası yok ve olmayacak; hiçbir akışta takılmaması için
+    # doğrulanmış sayılıyor. Karşılaştırma büyük/küçük harf duyarsız,
+    # çünkü veritabanındaki ad "Boss", ayardaki ise "boss".
+    yonetici = (os.environ.get("EBRU_ADMIN_USER") or "boss").strip().lower()
+    db.execute(
+        "UPDATE kullanicilar SET eposta_dogrulandi = 1 "
+        "WHERE lower(kullanici_adi) = ?",
+        (yonetici,),
+    )
+
+
 def kur():
-    """Tabloları oluşturur. Her açılışta çağrılabilir."""
+    """Tabloları oluşturur ve şema göçlerini uygular.
+
+    Her açılışta çağrılabilir; adımların hepsi tekrara dayanıklı.
+    """
     with _lock, _baglan() as db:
         db.execute("""
             CREATE TABLE IF NOT EXISTS kullanicilar (
@@ -97,6 +218,11 @@ def kur():
             "ON oturumlar(kullanici_id)"
         )
 
+        # Yukarıdaki CREATE TABLE'lar yalnızca boş bir veritabanında iş
+        # görüyor; var olan bir tabloya sonradan alan eklemiyorlar.
+        # Eksikleri bu tamamlıyor.
+        _goc_uygula(db)
+
 
 class KayitHatasi(Exception):
     """Kullanıcıya gösterilebilecek kayıt/giriş hatası."""
@@ -114,10 +240,55 @@ def _dogrula(kullanici_adi, sifre):
         )
 
 
-def kayit_ol(kullanici_adi, sifre):
-    """Yeni hesap oluşturur ve oturum anahtarı döner."""
+def _ad_dogrula(deger, alan_adi):
+    """Ad ya da soyadı denetler ve temizlenmiş halini döner.
+
+    Burada "doğrulama" yalnızca biçim denetimi. Bir kişinin gerçekten
+    o isimde olduğu kimlik belgesi olmadan anlaşılamaz; amaç boş ya da
+    anlamsız girdiyi elemek.
+    """
+    deger = " ".join((deger or "").split())  # baştaki/sondaki/çift boşluk
+    if not AD_DESENI.match(deger):
+        raise KayitHatasi(
+            f"{alan_adi} 2-40 karakter olmalı ve yalnızca harf, "
+            "boşluk, kesme işareti ya da tire içerebilir."
+        )
+    return deger
+
+
+def _eposta_dogrula(eposta):
+    """E-posta adresini denetler ve küçük harfe çevirip döner.
+
+    Adres küçük harfe çevriliyor: benzersizlik indeksi büyük/küçük
+    harfe duyarlı, yoksa "Ali@x.com" ve "ali@x.com" iki ayrı hesap
+    açabilirdi.
+    """
+    eposta = (eposta or "").strip().lower()
+    if not EPOSTA_DESENI.match(eposta) or len(eposta) > 254:
+        raise KayitHatasi("Geçerli bir e-posta adresi gir.")
+    return eposta
+
+
+def kayit_ol(kullanici_adi, sifre, ad=None, soyad=None, eposta=None):
+    """Yeni hesap oluşturur ve oturum anahtarı döner.
+
+    Ad, soyad ve e-posta 19 Ağustos 2026'da zorunlu hale geldi.
+    Bu alanları göndermeyen eski mobil sürüm kayıt yapamıyor; ne
+    olduğunu anlatan bir mesaj alıyor ve siteye yönlendiriliyor.
+    """
     kullanici_adi = (kullanici_adi or "").strip()
     _dogrula(kullanici_adi, sifre)
+
+    if not (ad and soyad and eposta):
+        raise KayitHatasi(
+            "Kayıt için ad, soyad ve e-posta gerekiyor. "
+            "Uygulamanın bu sürümü bunları gönderemiyor; "
+            "hesabını ebruai.com üzerinden açabilirsin."
+        )
+
+    ad = _ad_dogrula(ad, "Ad")
+    soyad = _ad_dogrula(soyad, "Soyad")
+    eposta = _eposta_dogrula(eposta)
 
     with _lock, _baglan() as db:
         mevcut = db.execute(
@@ -127,10 +298,30 @@ def kayit_ol(kullanici_adi, sifre):
         if mevcut:
             raise KayitHatasi("Bu kullanıcı adı zaten alınmış.")
 
+        # Benzersiz indeks bunu zaten engelliyor, ama oradan gelen hata
+        # kullanıcıya gösterilemeyecek bir veritabanı mesajı olurdu.
+        eposta_var = db.execute(
+            "SELECT 1 FROM kullanicilar WHERE eposta = ?", (eposta,)
+        ).fetchone()
+        if eposta_var:
+            raise KayitHatasi(
+                "Bu e-posta adresiyle zaten bir hesap var. "
+                "Giriş yapmayı dene."
+            )
+
         imlec = db.execute(
             "INSERT INTO kullanicilar "
-            "(kullanici_adi, sifre_hash, olusturma) VALUES (?, ?, ?)",
-            (kullanici_adi, generate_password_hash(sifre), time.time()),
+            "(kullanici_adi, sifre_hash, olusturma, ad, soyad, eposta, "
+            " eposta_dogrulandi, kayit_yolu) "
+            "VALUES (?, ?, ?, ?, ?, ?, 0, 'sifre')",
+            (
+                kullanici_adi,
+                generate_password_hash(sifre),
+                time.time(),
+                ad,
+                soyad,
+                eposta,
+            ),
         )
         kullanici_id = imlec.lastrowid
 
@@ -192,7 +383,8 @@ def oturumu_coz(token):
     with _lock, _baglan() as db:
         satir = db.execute(
             "SELECT o.token, o.kullanici_id, o.olusturma, "
-            "       k.kullanici_adi "
+            "       k.kullanici_adi, k.eposta, k.eposta_dogrulandi, "
+            "       k.yonetici, k.gunluk_limit "
             "FROM oturumlar o JOIN kullanicilar k ON k.id = o.kullanici_id "
             "WHERE o.token = ?",
             (token,),
@@ -217,12 +409,132 @@ def oturumu_coz(token):
     return {
         "id": satir["kullanici_id"],
         "kullanici_adi": satir["kullanici_adi"],
+        "eposta": satir["eposta"],
+        # Üretim uçları buna bakıyor: doğrulanmamış hesap üretemiyor.
+        "eposta_dogrulandi": bool(satir["eposta_dogrulandi"]),
+        "yonetici": bool(satir["yonetici"]),
+        # NULL ise genel günlük hak geçerli. 0 geçerli bir değer,
+        # bu yüzden "or" ile varsayılana düşülmemeli.
+        "gunluk_limit": satir["gunluk_limit"],
     }
 
 
 def cikis_yap(token):
     with _lock, _baglan() as db:
         db.execute("DELETE FROM oturumlar WHERE token = ?", (token,))
+
+
+# =====================================
+# E-POSTA DOĞRULAMA
+# =====================================
+# Bağlantının ömrü. Kısa tutmanın anlamı yok: kullanıcı postayı
+# akşam açabilir. Uzun tutmanın da yok: eski bağlantılar birikir.
+DOGRULAMA_SURESI = 24 * 3600
+
+# İki gönderim arasında beklenmesi gereken süre. Hem posta kotasını
+# hem de kullanıcının gelen kutusunu koruyor.
+DOGRULAMA_BEKLEME = 120
+
+
+def dogrulama_kodu_olustur(kullanici_id, eposta):
+    """Yeni doğrulama belirteci üretir.
+
+    Aynı kullanıcının önceki kullanılmamış belirteçleri geçersiz
+    kılınıyor: aynı anda birden fazla geçerli bağlantı dolaşmasın.
+
+    Döner: (token, bekle_saniye). bekle_saniye doluysa yeni belirteç
+    üretilmedi; çok sık istenmiş demektir.
+    """
+    simdi = time.time()
+
+    with _lock, _baglan() as db:
+        son = db.execute(
+            "SELECT olusturma FROM dogrulama_kodlari "
+            "WHERE kullanici_id = ? ORDER BY olusturma DESC LIMIT 1",
+            (kullanici_id,),
+        ).fetchone()
+
+        if son and simdi - son["olusturma"] < DOGRULAMA_BEKLEME:
+            kalan = int(DOGRULAMA_BEKLEME - (simdi - son["olusturma"])) + 1
+            return None, kalan
+
+        # Eskiler kullanılmış sayılıyor (silinmiyor: ne zaman ne
+        # gönderildiğini görmek hata ararken işe yarıyor).
+        db.execute(
+            "UPDATE dogrulama_kodlari SET kullanildi = 1 "
+            "WHERE kullanici_id = ? AND kullanildi = 0",
+            (kullanici_id,),
+        )
+
+        token = secrets.token_urlsafe(32)
+        db.execute(
+            "INSERT INTO dogrulama_kodlari "
+            "(token, kullanici_id, eposta, olusturma, son_gecerlilik) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (token, kullanici_id, eposta, simdi, simdi + DOGRULAMA_SURESI),
+        )
+
+    return token, None
+
+
+def dogrulama_kodu_kullan(token):
+    """Belirteci harcar ve hesabı doğrulanmış yapar.
+
+    Döner: kullanıcı adı. Geçersiz durumlarda KayitHatasi fırlatır.
+    """
+    simdi = time.time()
+
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT d.kullanici_id, d.eposta, d.son_gecerlilik, "
+            "       d.kullanildi, k.kullanici_adi, k.eposta AS guncel_eposta, "
+            "       k.eposta_dogrulandi "
+            "FROM dogrulama_kodlari d "
+            "JOIN kullanicilar k ON k.id = d.kullanici_id "
+            "WHERE d.token = ?",
+            (token,),
+        ).fetchone()
+
+        if not satir:
+            raise KayitHatasi(
+                "Bu doğrulama bağlantısı geçersiz. "
+                "Giriş yapıp yeni bağlantı isteyebilirsin."
+            )
+
+        if satir["eposta_dogrulandi"]:
+            # Aynı bağlantıya iki kez tıklamak hata sayılmamalı.
+            return satir["kullanici_adi"]
+
+        if satir["kullanildi"]:
+            raise KayitHatasi(
+                "Bu bağlantı daha önce kullanılmış ya da yerine yenisi "
+                "gönderilmiş. Giriş yapıp yeni bağlantı isteyebilirsin."
+            )
+
+        if simdi > satir["son_gecerlilik"]:
+            raise KayitHatasi(
+                "Bu bağlantının süresi dolmuş. "
+                "Giriş yapıp yeni bağlantı isteyebilirsin."
+            )
+
+        # Belirteç gönderildiği adrese ait. Kullanıcı arada e-postasını
+        # değiştirdiyse eski bağlantı YENİ adresi doğrulamamalı.
+        if (satir["guncel_eposta"] or "") != satir["eposta"]:
+            raise KayitHatasi(
+                "Bu bağlantı başka bir e-posta adresi için gönderilmiş. "
+                "Giriş yapıp yeni bağlantı iste."
+            )
+
+        db.execute(
+            "UPDATE dogrulama_kodlari SET kullanildi = 1 WHERE token = ?",
+            (token,),
+        )
+        db.execute(
+            "UPDATE kullanicilar SET eposta_dogrulandi = 1 WHERE id = ?",
+            (satir["kullanici_id"],),
+        )
+
+    return satir["kullanici_adi"]
 
 
 # ---------------------------------------------------------------
@@ -287,6 +599,13 @@ def hepsi():
             """
             SELECT k.id,
                    k.kullanici_adi,
+                   k.ad,
+                   k.soyad,
+                   k.eposta,
+                   k.eposta_dogrulandi,
+                   k.yonetici,
+                   k.gunluk_limit,
+                   k.kayit_yolu,
                    k.olusturma,
                    k.son_giris,
                    COALESCE(b.sayi, 0)   AS bugun,
@@ -307,6 +626,16 @@ def hepsi():
         {
             "id": s["id"],
             "kullanici_adi": s["kullanici_adi"],
+            "ad": s["ad"],
+            "soyad": s["soyad"],
+            "eposta": s["eposta"],
+            "eposta_dogrulandi": bool(s["eposta_dogrulandi"]),
+            # Veritabanındaki bayrak. app.py ayrıca ortam değişkenindeki
+            # yönetici hesabını da yönetici sayıyor; panel ikisini
+            # birleştirip gösteriyor.
+            "yonetici": bool(s["yonetici"]),
+            "gunluk_limit": s["gunluk_limit"],
+            "kayit_yolu": s["kayit_yolu"],
             "olusturma": s["olusturma"],
             "son_giris": s["son_giris"],
             "bugun": s["bugun"],
@@ -322,3 +651,96 @@ def kullanici_sayisi():
             "SELECT COUNT(*) AS n FROM kullanicilar"
         ).fetchone()
     return satir["n"]
+
+
+# =====================================
+# YÖNETİM İŞLEMLERİ
+# =====================================
+def yonetici_mi(kullanici_adi):
+    """Veritabanındaki yönetici bayrağını okur.
+
+    Ortam değişkenindeki yönetici hesabı burada görünmeyebilir; onu
+    app.py ayrıca denetliyor.
+    """
+    if not kullanici_adi:
+        return False
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT yonetici FROM kullanicilar "
+            "WHERE kullanici_adi = ? COLLATE NOCASE",
+            (kullanici_adi,),
+        ).fetchone()
+    return bool(satir and satir["yonetici"])
+
+
+def kullanici_getir(kullanici_id):
+    """Tek kullanıcıyı döner (şifre hash'i olmadan) ya da None."""
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT id, kullanici_adi, ad, soyad, eposta, "
+            "       eposta_dogrulandi, yonetici, gunluk_limit "
+            "FROM kullanicilar WHERE id = ?",
+            (kullanici_id,),
+        ).fetchone()
+    if not satir:
+        return None
+    return dict(satir)
+
+
+def yonetici_ayarla(kullanici_id, deger):
+    """Yönetici yetkisini verir ya da alır."""
+    with _lock, _baglan() as db:
+        imlec = db.execute(
+            "UPDATE kullanicilar SET yonetici = ? WHERE id = ?",
+            (1 if deger else 0, kullanici_id),
+        )
+    if not imlec.rowcount:
+        raise KayitHatasi("Kullanıcı bulunamadı.")
+
+
+def limit_ayarla(kullanici_id, deger):
+    """Kişiye özel günlük hakkı ayarlar.
+
+    deger None ise kişisel hak kaldırılır ve genel değer geçerli olur.
+    0 geçerli bir değer: o kullanıcı üretim yapamaz.
+    """
+    if deger is not None:
+        try:
+            deger = int(deger)
+        except (TypeError, ValueError):
+            raise KayitHatasi("Günlük hak bir sayı olmalı.")
+        if deger < 0 or deger > 10000:
+            raise KayitHatasi("Günlük hak 0 ile 10000 arasında olmalı.")
+
+    with _lock, _baglan() as db:
+        imlec = db.execute(
+            "UPDATE kullanicilar SET gunluk_limit = ? WHERE id = ?",
+            (deger, kullanici_id),
+        )
+    if not imlec.rowcount:
+        raise KayitHatasi("Kullanıcı bulunamadı.")
+
+
+def sil(kullanici_id):
+    """Hesabı ve ona bağlı her şeyi siler.
+
+    Oturumlar, kullanım sayaçları ve doğrulama kodları da gidiyor:
+    yabancı anahtar kısıtı SQLite'ta varsayılan olarak zorlanmıyor,
+    yani bunlar temizlenmezse veritabanında sahipsiz satırlar kalır.
+    """
+    with _lock, _baglan() as db:
+        db.execute(
+            "DELETE FROM oturumlar WHERE kullanici_id = ?", (kullanici_id,)
+        )
+        db.execute(
+            "DELETE FROM kullanim WHERE kullanici_id = ?", (kullanici_id,)
+        )
+        db.execute(
+            "DELETE FROM dogrulama_kodlari WHERE kullanici_id = ?",
+            (kullanici_id,),
+        )
+        imlec = db.execute(
+            "DELETE FROM kullanicilar WHERE id = ?", (kullanici_id,)
+        )
+    if not imlec.rowcount:
+        raise KayitHatasi("Kullanıcı bulunamadı.")

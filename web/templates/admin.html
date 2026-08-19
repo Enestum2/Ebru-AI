@@ -72,14 +72,33 @@
 
     <!-- Kullanıcılar -->
     <div>
-      <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest mb-sm">
-        Kayıtlı kullanıcılar
-      </h2>
+      <div class="flex flex-wrap items-center justify-between gap-sm mb-sm">
+        <h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-widest">
+          Kayıtlı kullanıcılar
+          <span id="kullaniciSayaci"
+                class="ml-xs font-label-sm text-label-sm text-outline normal-case tracking-normal"></span>
+        </h2>
+        <input type="search" id="kullaniciArama"
+               placeholder="Ad, kullanıcı adı ya da e-posta ara"
+               class="w-full sm:w-72 rounded-lg bg-surface-container-low border border-white/10
+                      focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                      px-sm py-xs font-body-md text-body-md text-on-surface transition-colors">
+      </div>
+
+      {# İşlem sonuçları burada gösteriliyor. alert() kullanılmıyor:
+         sayfayı kilitliyor ve arka arkaya işlem yaparken rahatsız edici. #}
+      <div id="bildirim" class="hidden"></div>
+
       <div class="rounded-xl bg-surface-container-lowest border border-white/5 overflow-hidden">
         <div class="overflow-x-auto">
           <table id="kullanicilar" class="w-full text-left font-body-md text-body-md"></table>
         </div>
       </div>
+
+      <p class="font-label-sm text-label-sm text-outline mt-xs">
+        Günlük hak kutusu boş bırakılırsa genel değer geçerli olur.
+        0 yazmak o hesabın üretimini kapatır.
+      </p>
     </div>
 
     <!-- Son istekler -->
@@ -208,34 +227,210 @@ function isleriYaz(isler) {
 }
 
 /* --- Kullanıcılar --- */
+/*
+ * Tablo artik salt goruntuleme degil: yetki verme, kisiye ozel gunluk
+ * hak ve hesap silme buradan yapiliyor. Islemler satir icinde duruyor,
+ * cunku hepsi tek bir kullaniciya ait; ayri bir ekrana gitmek gereksiz
+ * tikla demek.
+ */
+let SON_LISTE = [];
+let SON_LIMIT = 3;
+
 function kullanicilariYaz(liste, limit) {
+  SON_LISTE = liste;
+  SON_LIMIT = limit;
+  tabloyuCiz();
+}
+
+function tabloyuCiz() {
   const t = document.getElementById('kullanicilar');
+  const kutu = document.getElementById('kullaniciArama');
+  const arama = (kutu ? kutu.value : '').trim().toLowerCase();
+
+  /* Arama ad, soyad, kullanici adi ve e-postada birden bakiyor:
+     kullanici hangi bilgiyi hatirliyorsa onunla bulabilsin. */
+  const liste = !arama ? SON_LISTE : SON_LISTE.filter(function (k) {
+    return [k.kullanici_adi, k.ad, k.soyad, k.eposta]
+      .filter(Boolean).join(' ').toLowerCase().indexOf(arama) !== -1;
+  });
+
+  const sayac = document.getElementById('kullaniciSayaci');
+  if (sayac) {
+    sayac.textContent = arama
+      ? liste.length + ' / ' + SON_LISTE.length
+      : SON_LISTE.length + ' kullanıcı';
+  }
 
   if (!liste.length) {
-    t.innerHTML = '<tr><td class="px-sm py-md text-center text-outline">Henüz kayıtlı kullanıcı yok.</td></tr>';
+    t.innerHTML = '<tr><td class="px-sm py-md text-center text-outline">' +
+      (arama ? 'Aramaya uyan kullanıcı yok.' : 'Henüz kayıtlı kullanıcı yok.') +
+      '</td></tr>';
     return;
   }
 
   t.innerHTML =
     '<tr>' +
-    ['Kullanıcı', 'Kayıt', 'Son giriş', 'Bugün', 'Toplam']
-      .map((b) => '<th class="' + BASLIK_HUCRE + '">' + b + '</th>').join('') +
+    ['Kullanıcı', 'Ad Soyad', 'E-posta', 'Kayıt', 'Son giriş',
+     'Bugün', 'Toplam', 'Günlük hak', 'İşlem']
+      .map(function (b) { return '<th class="' + BASLIK_HUCRE + '">' + b + '</th>'; })
+      .join('') +
     '</tr>' +
-    liste.map((k) => {
-      const doldu = !k.yonetici && k.bugun >= limit;
+    liste.map(function (k) {
+      const hak = k.gecerli_limit;
+      const doldu = !k.yonetici && k.bugun >= hak;
+      const adSoyad = [k.ad, k.soyad].filter(Boolean).join(' ');
+
+      /* E-posta onayi gorsel olarak ayirt ediliyor: onaysiz hesap
+         uretim yapamiyor, bu tablodaki en onemli bilgilerden biri. */
+      const eposta = k.eposta
+        ? kacak(k.eposta) + (k.eposta_dogrulandi
+            ? ' <span class="text-tertiary" title="onaylı">&#10003;</span>'
+            : ' <span class="text-error" title="onaylanmamış">&#10007;</span>')
+        : '<span class="text-outline">&mdash;</span>';
+
       return '<tr class="hover:bg-surface-container-low transition-colors">' +
         '<td class="' + HUCRE + ' text-on-surface">' + kacak(k.kullanici_adi) +
           (k.yonetici
             ? ' <span class="text-gold font-label-sm text-label-sm">· yönetici</span>'
             : '') + '</td>' +
+        '<td class="' + HUCRE + ' text-on-surface-variant">' +
+          (adSoyad ? kacak(adSoyad) : '<span class="text-outline">&mdash;</span>') +
+        '</td>' +
+        '<td class="' + HUCRE + ' text-on-surface-variant">' + eposta + '</td>' +
         '<td class="' + HUCRE + ' text-on-surface-variant">' + tarih(k.olusturma) + '</td>' +
         '<td class="' + HUCRE + ' text-on-surface-variant">' + tarih(k.son_giris) + '</td>' +
         '<td class="' + HUCRE + ' ' + (doldu ? 'text-error' : 'text-on-surface') + '">' +
-          k.bugun + ' / ' + (k.yonetici ? '∞' : limit) + '</td>' +
+          k.bugun + ' / ' + (k.yonetici ? '&infin;' : hak) + '</td>' +
         '<td class="' + HUCRE + ' text-on-surface-variant">' + k.toplam + '</td>' +
+
+        /* Gunluk hak: bos birakilirsa genel deger gecerli olur.
+           placeholder o genel degeri gosteriyor ki "bos"un ne anlama
+           geldigi tahmin edilmek zorunda kalmasin. */
+        '<td class="' + HUCRE + '">' +
+          '<input type="number" min="0" max="10000"' +
+                 ' value="' + (k.gunluk_limit === null ? '' : k.gunluk_limit) + '"' +
+                 ' placeholder="' + SON_LIMIT + '"' +
+                 ' data-id="' + k.id + '"' +
+                 ' class="hak-girdi w-20 rounded bg-surface-container-low' +
+                        ' border border-white/10 px-xs py-[2px] text-on-surface' +
+                        ' focus:border-gold/60 focus:outline-none">' +
+        '</td>' +
+
+        '<td class="' + HUCRE + '">' +
+          '<div class="flex items-center gap-xs">' +
+            (k.kurucu_yonetici
+              ? '<span class="text-outline font-label-sm text-label-sm"' +
+                      ' title="Kurucu yönetici: yetkisi alınamaz, silinemez">kurucu</span>'
+              : '<button type="button" data-yetki="' + k.id + '"' +
+                        ' data-deger="' + (k.yonetici ? '0' : '1') + '"' +
+                        ' class="px-xs py-[2px] rounded bg-white/10 hover:bg-white/20' +
+                               ' font-label-sm text-label-sm transition-colors">' +
+                  (k.yonetici ? 'Yetkiyi al' : 'Yönetici yap') +
+                '</button>' +
+                '<button type="button" data-sil="' + k.id + '"' +
+                        ' data-ad="' + kacak(k.kullanici_adi) + '"' +
+                        ' class="px-xs py-[2px] rounded bg-error/15 hover:bg-error/25' +
+                               ' text-error font-label-sm text-label-sm transition-colors">' +
+                  'Sil' +
+                '</button>') +
+          '</div>' +
+        '</td>' +
       '</tr>';
     }).join('');
 }
+
+/* Islem uclari. Hepsi ayni kaliba uyuyor: istegi at, sonucu bildir,
+   listeyi tazele. */
+async function yonetimIstegi(yol, secenekler, basariMesaji) {
+  const basliklar = EbruHesap.basliklar();
+  basliklar['Content-Type'] = 'application/json';
+  secenekler.headers = basliklar;
+
+  try {
+    const cevap = await fetch(uc(yol), secenekler);
+    const veri = await cevap.json().catch(function () { return {}; });
+    if (!cevap.ok) {
+      bildir(veri.message || 'İşlem başarısız.', true);
+      return false;
+    }
+    if (basariMesaji) bildir(basariMesaji, false);
+    await yukle();
+    return true;
+  } catch (hata) {
+    bildir('Sunucuya ulaşılamadı.', true);
+    return false;
+  }
+}
+
+function bildir(mesaj, hataMi) {
+  const k = document.getElementById('bildirim');
+  if (!k) return;
+  k.textContent = mesaj;
+  k.className = 'mb-sm p-sm rounded-lg font-label-md text-label-md border ' +
+    (hataMi
+      ? 'bg-error/10 border-error/30 text-error'
+      : 'bg-gold/10 border-gold/30 text-on-surface');
+  clearTimeout(k._zaman);
+  k._zaman = setTimeout(function () { k.className = 'hidden'; }, 5000);
+}
+
+/* Olaylar tabloya bir kez baglaniyor (olay delegasyonu): tablo her
+   tazelemede bastan cizildigi icin butonlara tek tek dinleyici
+   baglamak her seferinde yeniden yapilmasi gereken bir is olurdu. */
+document.addEventListener('DOMContentLoaded', function () {
+  const tablo = document.getElementById('kullanicilar');
+  if (!tablo) return;
+
+  tablo.addEventListener('click', async function (e) {
+    const yetki = e.target.closest('[data-yetki]');
+    if (yetki) {
+      const ver = yetki.dataset.deger === '1';
+      await yonetimIstegi(
+        '/admin/kullanicilar/' + yetki.dataset.yetki + '/yonetici',
+        { method: 'POST', body: JSON.stringify({ yonetici: ver }) },
+        ver ? 'Yönetici yetkisi verildi.' : 'Yönetici yetkisi alındı.'
+      );
+      return;
+    }
+
+    const sil = e.target.closest('[data-sil]');
+    if (sil) {
+      /* Geri alinamayan islem: onay sart. Kullanici adini yazdirmak
+         yanlis satira basmayi buyuk olcude engelliyor. */
+      const ad = sil.dataset.ad;
+      const soru = '"' + ad + '" hesabi ve ona ait butun kayitlar kalici ' +
+                   'olarak silinecek.\n\nBu islem geri alinamaz. Emin misin?';
+      if (!confirm(soru)) return;
+      await yonetimIstegi(
+        '/admin/kullanicilar/' + sil.dataset.sil,
+        { method: 'DELETE' },
+        ad + ' silindi.'
+      );
+    }
+  });
+
+  /* Hak alani: odak kaybinda ya da Enter'da kaydediliyor. Her tusta
+     istek atmak gereksiz yuk olurdu. */
+  tablo.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('hak-girdi')) return;
+    const deger = e.target.value.trim();
+    yonetimIstegi(
+      '/admin/kullanicilar/' + e.target.dataset.id + '/limit',
+      { method: 'POST', body: JSON.stringify({ limit: deger === '' ? null : deger }) },
+      deger === '' ? 'Genel hak geçerli oldu.' : 'Günlük hak ' + deger + ' yapıldı.'
+    );
+  });
+
+  tablo.addEventListener('keydown', function (e) {
+    if (e.target.classList.contains('hak-girdi') && e.key === 'Enter') {
+      e.preventDefault();
+      e.target.blur();
+    }
+  });
+
+  const arama = document.getElementById('kullaniciArama');
+  if (arama) arama.addEventListener('input', tabloyuCiz);
+});
 
 /* --- Son istekler --- */
 function istekleriYaz(istekler) {

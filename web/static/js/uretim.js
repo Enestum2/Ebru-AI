@@ -57,6 +57,10 @@
     yogunluk: 50,
     oran: ORANLAR[0].oran,
     uretiliyor: false,
+    // Görseli üreten bilgisayar bağlı mı? Bilinene kadar "açık"
+    // varsayılıyor: /health cevap vermeden butonu kilitlemek, üretim
+    // aslında açıkken kullanıcıyı boşuna çevirirdi.
+    uretimAcik: true,
   };
 
   /* --------------------------------------------------------------
@@ -302,9 +306,57 @@
   function dugmeyiKilitle(kilitli) {
     const dugme = $('uretDugmesi');
     if (!dugme) return;
-    dugme.disabled = kilitli;
-    dugme.querySelector('.dugme-metin').textContent =
-      kilitli ? 'Üretiliyor...' : 'Ebruyu oluştur';
+
+    // İki ayrı sebeple kilitlenebiliyor: üretim sürüyor olabilir ya da
+    // üreten bilgisayar kapalı olabilir. İkisi de aynı butonu etkilediği
+    // için karar tek yerde veriliyor, yoksa biri diğerinin metnini
+    // eziyordu.
+    const kapali = !durum.uretimAcik;
+    dugme.disabled = kilitli || kapali;
+
+    let metin = 'Ebruyu oluştur';
+    if (kilitli) metin = 'Üretiliyor...';
+    else if (kapali) metin = 'Üretim şu anda kapalı';
+
+    dugme.querySelector('.dugme-metin').textContent = metin;
+  }
+
+  /* --------------------------------------------------------------
+     Üretim sunucusunun durumu
+
+     Site her zaman ayakta; görseli üreten bilgisayar ayrı ve yalnızca
+     açıkken bağlı. Durum baştan gösteriliyor ki kullanıcı bütün
+     seçimleri yapıp butona bastıktan sonra "kapalı" cevabı almasın.
+     Düzenli aralıkla tazeleniyor: üretim açıldığında sayfayı
+     yenilemek gerekmiyor.
+     -------------------------------------------------------------- */
+  const DURUM_ARALIGI = 30000;
+
+  async function durumuSorgula() {
+    let acik;
+    try {
+      const cevap = await fetch('/health');
+      if (!cevap.ok) return;
+      const veri = await cevap.json();
+      acik = veri.ready !== false;
+    } catch (hata) {
+      // Sitenin kendisine ulaşılamıyorsa bunu "üretim kapalı" diye
+      // göstermek yanıltıcı olur; eldeki duruma dokunma.
+      return;
+    }
+
+    if (acik === durum.uretimAcik) return;
+    durum.uretimAcik = acik;
+
+    const uyari = $('uretimKapaliUyarisi');
+    if (uyari) {
+      uyari.classList.toggle('hidden', acik);
+      uyari.classList.toggle('flex', !acik);
+    }
+
+    // Üretim sürerken buton zaten kilitli; metnini bozmamak için
+    // yalnızca boştayken tazeleniyor.
+    if (!durum.uretiliyor) dugmeyiKilitle(false);
   }
 
   /* --------------------------------------------------------------
@@ -488,6 +540,9 @@
     oranlariKur();
 
     $('uretDugmesi').addEventListener('click', uret);
+
+    durumuSorgula();
+    setInterval(durumuSorgula, DURUM_ARALIGI);
 
     const yeni = $('yeniDugmesi');
     if (yeni) {

@@ -179,6 +179,25 @@
                     font-label-md text-label-md transition-colors">Giriş yap</a>
         </div>
 
+        <!-- Üretim sunucusu kapalıyken görünen bilgi; uretim.js
+             /health ile dolduruyor. Site her zaman ayakta, görseli
+             üreten bilgisayar ise yalnızca açıkken bağlı. Bu bir hata
+             değil, beklenen bir durum: o yüzden kırmızı hata kutusu
+             değil nötr bir bilgi kutusu. -->
+        <div id="uretimKapaliUyarisi"
+             class="hidden mb-sm p-sm rounded-lg bg-surface-container-low border border-white/15
+                    flex items-center gap-sm">
+          <span class="material-symbols-outlined text-tertiary shrink-0">bedtime</span>
+          <p class="flex-1 font-label-md text-label-md text-on-surface-variant">
+            <span class="text-on-surface">Üretim şu anda kapalı.</span>
+            Görselleri üreten bilgisayar çevrimdışı. Site açık kalmaya devam
+            ediyor; üretim açıldığında bu uyarı kendiliğinden kalkar.
+          </p>
+          <a href="/ornekler"
+             class="shrink-0 px-md py-xs rounded-full bg-white/10 hover:bg-white/15 text-on-surface
+                    font-label-md text-label-md transition-colors">Örnekleri gez</a>
+        </div>
+
         <div id="hataKutusu"
              class="hidden mb-sm p-sm rounded-lg bg-error/10 border border-error/30
                     font-label-md text-label-md text-error"></div>
@@ -359,5 +378,5 @@
 {% endblock %}
 
 {% block ek_js %}
-<script src="{{ url_for('static', filename='js/uretim.js') }}?v=5"></script>
+<script src="{{ statik('js/uretim.js') }}"></script>
 {% endblock %}
