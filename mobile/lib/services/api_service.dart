@@ -191,11 +191,43 @@ class AuthResult {
   /// Sunucu bu hesabın izleme ekranına erişebileceğini bildiriyor.
   final bool isAdmin;
 
+  /// E-posta onaylanmadan üretim yapılamıyor. Uygulama bu bilgiyle
+  /// kullanıcıyı doğrudan üretim ekranına değil, onay ekranına
+  /// götürüyor; yoksa seçimleri yapıp sonunda reddedilirdi.
+  final bool emailVerified;
+
   const AuthResult({
     required this.token,
     required this.username,
     this.isAdmin = false,
+    this.emailVerified = true,
   });
+}
+
+/// Google ile girişin sonucu.
+///
+/// İki durumdan biri: ya oturum açıldı, ya da kişi ilk kez geliyor ve
+/// kullanıcı adı seçmesi gerekiyor. Sunucu bu iki durumu ayrı
+/// bildirdiği için burada da ayrı temsil ediliyor; tek bir nullable
+/// alanla anlatmaya çalışmak çağıran tarafta karışıklık yaratıyordu.
+class GoogleGirisSonucu {
+  /// Oturum açıldıysa dolu.
+  final AuthResult? oturum;
+
+  /// Kullanıcı adı gerekiyorsa dolu (sunucunun önerdiği ad).
+  final String? onerilenKullaniciAdi;
+  final String? eposta;
+
+  const GoogleGirisSonucu.girildi(AuthResult this.oturum)
+      : onerilenKullaniciAdi = null,
+        eposta = null;
+
+  const GoogleGirisSonucu.kullaniciAdiGerekli({
+    this.onerilenKullaniciAdi,
+    this.eposta,
+  }) : oturum = null;
+
+  bool get kullaniciAdiGerekiyor => oturum == null;
 }
 
 class ApiService {
@@ -234,8 +266,22 @@ class ApiService {
   // Hesap
   // ---------------------------------------------------------------
 
-  Future<AuthResult> register(String username, String password) =>
-      _authIstegi('/auth/register', username, password);
+  /// Yeni hesap açar.
+  ///
+  /// Ad, soyad ve e-posta artık zorunlu: sunucu bunlar olmadan kaydı
+  /// reddediyor ve hesap e-posta onaylanana kadar üretim yapamıyor.
+  Future<AuthResult> register(
+    String username,
+    String password, {
+    required String ad,
+    required String soyad,
+    required String eposta,
+  }) =>
+      _authIstegi('/auth/register', username, password, ekler: {
+        'first_name': ad,
+        'last_name': soyad,
+        'email': eposta,
+      });
 
   Future<AuthResult> login(String username, String password) =>
       _authIstegi('/auth/login', username, password);
@@ -243,14 +289,15 @@ class ApiService {
   Future<AuthResult> _authIstegi(
     String yol,
     String username,
-    String password,
-  ) async {
+    String password, {
+    Map<String, dynamic> ekler = const {},
+  }) async {
     late final Response cevap;
 
     try {
       cevap = await _dio.post(
         '$baseUrl$yol',
-        data: {'username': username, 'password': password},
+        data: {'username': username, 'password': password, ...ekler},
         options: Options(
           headers: _headers,
           receiveTimeout: const Duration(seconds: 20),
@@ -263,11 +310,7 @@ class ApiService {
     final veri = cevap.data;
     if (cevap.statusCode == 200 || cevap.statusCode == 201) {
       if (veri is Map && veri['token'] != null) {
-        return AuthResult(
-          token: veri['token'] as String,
-          username: veri['username'] as String? ?? username,
-          isAdmin: veri['is_admin'] == true,
-        );
+        return _authSonucu(veri, username);
       }
       throw const ApiException('Sunucu beklenmedik yanıt verdi');
     }
@@ -279,12 +322,40 @@ class ApiService {
     );
   }
 
+  /// Sunucunun giriş/kayıt cevabını ortak biçimde okur.
+  AuthResult _authSonucu(Map veri, String yedekKullaniciAdi) => AuthResult(
+        token: veri['token'] as String,
+        username: veri['username'] as String? ?? yedekKullaniciAdi,
+        isAdmin: veri['is_admin'] == true,
+        // Alan yoksa "onaylı" kabul ediliyor: eski sunucu sürümüne
+        // bağlanıldığında kullanıcı gereksiz yere onay ekranında
+        // kilitlenmesin.
+        emailVerified: veri['email_verified'] != false,
+      );
+
   /// Kayıtlı oturumun hâlâ geçerli olup olmadığını sorar.
   ///
-  /// Döner: (gecerli, yonetici_mi). Ağ hatasında oturum geçerli
-  /// sayılıyor — kullanıcı çevrimdışıyken uygulamadan atılmamalı.
-  Future<({bool valid, bool isAdmin})> sessionValid() async {
-    if (sessionToken.isEmpty) return (valid: false, isAdmin: false);
+  /// Ağ hatasında oturum geçerli sayılıyor — kullanıcı çevrimdışıyken
+  /// uygulamadan atılmamalı. Aynı sebeple e-posta da onaylı kabul
+  /// ediliyor; sunucuya sorulamadığı için onay ekranında kilitlemek
+  /// yanlış olur.
+  Future<
+      ({
+        bool valid,
+        bool isAdmin,
+        bool emailVerified,
+        String? email,
+        bool hasPassword
+      })> sessionValid() async {
+    if (sessionToken.isEmpty) {
+      return (
+        valid: false,
+        isAdmin: false,
+        emailVerified: true,
+        email: null,
+        hasPassword: true,
+      );
+    }
 
     try {
       final cevap = await _dio.get(
@@ -296,17 +367,159 @@ class ApiService {
       );
 
       if (cevap.statusCode != 200) {
-        return (valid: false, isAdmin: false);
+        return (
+          valid: false,
+          isAdmin: false,
+          emailVerified: true,
+          email: null,
+          hasPassword: true,
+        );
       }
 
       final veri = cevap.data;
+      final m = veri is Map ? veri : const {};
       return (
         valid: true,
-        isAdmin: veri is Map && veri['is_admin'] == true,
+        isAdmin: m['is_admin'] == true,
+        emailVerified: m['email_verified'] != false,
+        email: m['email'] as String?,
+        // Alan yoksa "sifresi var" kabul ediliyor: eski sunucu surumune
+        // baglanildiginda silme ekrani sifre sorsun, kullanici adi degil.
+        hasPassword: m['has_password'] != false,
       );
     } catch (_) {
-      return (valid: true, isAdmin: false);
+      return (
+        valid: true,
+        isAdmin: false,
+        emailVerified: true,
+        email: null,
+        hasPassword: true,
+      );
     }
+  }
+
+  /// Doğrulama bağlantısını yeniden gönderir.
+  Future<String> dogrulamaGonder() async {
+    late final Response cevap;
+    try {
+      cevap = await _dio.post(
+        '$baseUrl/auth/dogrulama-gonder',
+        options: Options(headers: _headers),
+      );
+    } on DioException catch (e) {
+      throw ApiException(_dioMesaji(e));
+    }
+
+    final veri = cevap.data;
+    final mesaj = veri is Map ? veri['message'] as String? : null;
+    if (cevap.statusCode == 200) {
+      return mesaj ?? 'Doğrulama bağlantısı gönderildi.';
+    }
+    throw ApiException(mesaj ?? 'Bağlantı gönderilemedi.');
+  }
+
+  // ---------------------------------------------------------------
+  // Google ile giriş
+  // ---------------------------------------------------------------
+  // Google'dan alınan kimlik belirteci sunucuya gönderiliyor; doğrulama
+  // orada yapılıyor. Sunucu ya oturum açıyor ya da "bu kişi yeni,
+  // kullanıcı adı seçsin" diyor.
+  //
+  // Belirteç ikinci istekte tekrar gönderiliyor ve yeniden
+  // doğrulanıyor. Böylece sunucuda "bekleyen kayıt" diye bir durum
+  // tutmak gerekmiyor.
+
+  /// Google girişi açık mı ve hangi istemci kimliği kullanılacak.
+  ///
+  /// Kimlik uygulamaya gömülmüyor; sunucudan okunuyor. Böylece
+  /// değişmesi gerektiğinde yeni APK çıkarmak gerekmiyor.
+  Future<({bool enabled, String clientId})> googleDurum() async {
+    try {
+      final cevap = await _dio.get(
+        '$baseUrl/auth/google/durum',
+        options: Options(
+          headers: _headers,
+          receiveTimeout: const Duration(seconds: 12),
+        ),
+      );
+      final veri = cevap.data;
+      if (cevap.statusCode == 200 && veri is Map) {
+        return (
+          enabled: veri['enabled'] == true,
+          clientId: (veri['client_id'] as String?) ?? '',
+        );
+      }
+    } catch (_) {
+      // Ulaşılamıyorsa Google düğmesi gösterilmiyor; giriş formu
+      // zaten çalışıyor.
+    }
+    return (enabled: false, clientId: '');
+  }
+
+  Future<GoogleGirisSonucu> googleGiris(String idToken) async {
+    final cevap = await _googleIstegi('/auth/google', {
+      'credential': idToken,
+    });
+
+    final veri = cevap.data;
+    final m = veri is Map ? veri : const {};
+
+    if (m['status'] == 'username_required') {
+      return GoogleGirisSonucu.kullaniciAdiGerekli(
+        onerilenKullaniciAdi: m['suggested'] as String?,
+        eposta: m['email'] as String?,
+      );
+    }
+
+    if (m['token'] != null) {
+      return GoogleGirisSonucu.girildi(_authSonucu(m, ''));
+    }
+
+    throw ApiException(
+      (m['message'] as String?) ?? 'Google girişi tamamlanamadı.',
+    );
+  }
+
+  Future<AuthResult> googleKullaniciAdi(
+    String idToken,
+    String kullaniciAdi,
+  ) async {
+    final cevap = await _googleIstegi('/auth/google/kullanici-adi', {
+      'credential': idToken,
+      'username': kullaniciAdi,
+    });
+
+    final veri = cevap.data;
+    final m = veri is Map ? veri : const {};
+    if (m['token'] != null) return _authSonucu(m, kullaniciAdi);
+
+    throw ApiException(
+      (m['message'] as String?) ?? 'Hesap oluşturulamadı.',
+    );
+  }
+
+  Future<Response> _googleIstegi(String yol, Map<String, dynamic> govde) async {
+    late final Response cevap;
+    try {
+      cevap = await _dio.post(
+        '$baseUrl$yol',
+        data: govde,
+        options: Options(
+          headers: _headers,
+          receiveTimeout: const Duration(seconds: 25),
+        ),
+      );
+    } on DioException catch (e) {
+      throw ApiException(_dioMesaji(e));
+    }
+
+    if (cevap.statusCode == 200 || cevap.statusCode == 201) return cevap;
+
+    final veri = cevap.data;
+    throw ApiException(
+      (veri is Map ? veri['message'] as String? : null) ??
+          'Google girişi başarısız (kod: ${cevap.statusCode})',
+    );
   }
 
   Future<void> logout() async {
@@ -319,6 +532,44 @@ class ApiService {
     } catch (_) {
       // Sunucuya ulaşılamasa da yerel oturum temizlenecek.
     }
+  }
+
+  /// Hesabı ve sunucudaki bütün verilerini kalıcı olarak siler.
+  ///
+  /// Son onay hesabın açılış yoluna göre değişiyor: şifreyle açılmış
+  /// hesap [sifre], Google ile açılmış hesap kullanıcı adını [onay]
+  /// alanında gönderiyor. Google hesaplarının kullanılabilir bir
+  /// şifresi olmadığı için tek bir alan ikisine birden yetmiyor.
+  ///
+  /// Çıkıştan farklı olarak hata yutulmuyor: silinmediği hâlde
+  /// "silindi" demek, kullanıcının hesabının durduğunu bilmemesi
+  /// demek olurdu.
+  Future<void> hesabimiSil({String? sifre, String? onay}) async {
+    late final Response cevap;
+
+    try {
+      cevap = await _dio.post(
+        '$baseUrl/auth/hesabimi-sil',
+        data: {
+          'sifre': ?sifre,
+          'onay': ?onay,
+        },
+        options: Options(
+          headers: _headers,
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      );
+    } on DioException catch (e) {
+      throw ApiException(_dioMesaji(e));
+    }
+
+    if (cevap.statusCode == 200) return;
+
+    final veri = cevap.data;
+    throw ApiException(
+      (veri is Map ? veri['message'] as String? : null) ??
+          'Hesap silinemedi (kod: ${cevap.statusCode})',
+    );
   }
 
   /// Sunucunun ve GPU'nun durumunu sorar.
@@ -507,7 +758,7 @@ class ApiService {
     }
 
     throw const ApiException(
-      'Üretim çok uzun sürdü. Lütfen tekrar dene.',
+      'Üretim çok uzun sürdü. Lütfen tekrar deneyin.',
     );
   }
 
@@ -586,7 +837,7 @@ class ApiService {
     // İş kaydı süresi dolup silinmişse tekrar beklemenin anlamı yok.
     if (cevap.statusCode == 404) {
       throw const ApiException(
-        'Bu üretimin kaydı sunucuda kalmamış. Tekrar dene.',
+        'Bu üretimin kaydı sunucuda kalmamış. Lütfen tekrar deneyin.',
       );
     }
 

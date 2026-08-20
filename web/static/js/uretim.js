@@ -388,7 +388,7 @@
 
     if (cevap.status === 401) {
       EbruHesap.temizle();
-      throw new Error('Oturumun sona ermiş. Tekrar giriş yap.');
+      throw new Error('Oturumunuz sona ermiş. Lütfen tekrar giriş yapın.');
     }
     if (!cevap.ok) {
       throw new Error(veri.message || 'Üretim başlatılamadı.');
@@ -431,7 +431,7 @@
       }
     }
 
-    throw new Error('Üretim çok uzun sürdü. Lütfen tekrar dene.');
+    throw new Error('Üretim çok uzun sürdü. Lütfen tekrar deneyin.');
   }
 
   function sonucuYaz(sonuc) {

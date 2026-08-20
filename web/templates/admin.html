@@ -399,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function () {
          yanlis satira basmayi buyuk olcude engelliyor. */
       const ad = sil.dataset.ad;
       const soru = '"' + ad + '" hesabi ve ona ait butun kayitlar kalici ' +
-                   'olarak silinecek.\n\nBu islem geri alinamaz. Emin misin?';
+                   'olarak silinecek.\n\nBu islem geri alinamaz. Emin misiniz?';
       if (!confirm(soru)) return;
       await yonetimIstegi(
         '/admin/kullanicilar/' + sil.dataset.sil,
@@ -410,15 +410,30 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   /* Hak alani: odak kaybinda ya da Enter'da kaydediliyor. Her tusta
-     istek atmak gereksiz yuk olurdu. */
+     istek atmak gereksiz yuk olurdu.
+
+     Kisa bir gecikme var, cunku sayi alaninin yukari-asagi oklari HER
+     tiklamada "change" tetikliyor. Olcum: ust uste tiklamada tek
+     saniyede alti kayit istegi gitti (4, 5, 5, 6, 7, 8). Sonuc dogru
+     cikiyordu ama cevaplar sirasiz donerse tabloda eski deger
+     kalabilir. Gecikme ard arda tiklamalari tek istekte topluyor. */
+  const HAK_GECIKME = 500;
+  const hakZamanlayici = {};
+
   tablo.addEventListener('change', function (e) {
     if (!e.target.classList.contains('hak-girdi')) return;
+    const kimlik = e.target.dataset.id;
     const deger = e.target.value.trim();
-    yonetimIstegi(
-      '/admin/kullanicilar/' + e.target.dataset.id + '/limit',
-      { method: 'POST', body: JSON.stringify({ limit: deger === '' ? null : deger }) },
-      deger === '' ? 'Genel hak geçerli oldu.' : 'Günlük hak ' + deger + ' yapıldı.'
-    );
+
+    clearTimeout(hakZamanlayici[kimlik]);
+    hakZamanlayici[kimlik] = setTimeout(function () {
+      delete hakZamanlayici[kimlik];
+      yonetimIstegi(
+        '/admin/kullanicilar/' + kimlik + '/limit',
+        { method: 'POST', body: JSON.stringify({ limit: deger === '' ? null : deger }) },
+        deger === '' ? 'Genel hak geçerli oldu.' : 'Günlük hak ' + deger + ' yapıldı.'
+      );
+    }, HAK_GECIKME);
   });
 
   tablo.addEventListener('keydown', function (e) {

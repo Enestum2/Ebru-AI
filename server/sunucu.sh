@@ -251,6 +251,54 @@ PY
 }
 
 # ---------------------------------------------------------------
+# apk — yeni derlenmis APK'yi siteye yukle
+# ---------------------------------------------------------------
+# "guncelle" APK gondermiyor: 58 MB ve her kod degisikliginde
+# degismiyor, yavas baglantida bosuna dakikalar yakardi. Yeni surum
+# ciktiginda bu komut calistiriliyor.
+komut_apk() {
+  local kaynak="${2:-}"
+  if [[ -z "$kaynak" ]]; then
+    # Flutter'in varsayilan cikti yolu.
+    kaynak="$BETIK_DIZINI/../../../../ebru_ai_wallpaper/build/app/outputs/flutter-apk/app-release.apk"
+    kaynak="$(cd "$(dirname "$kaynak")" 2>/dev/null && pwd)/$(basename "$kaynak")" || true
+  fi
+
+  if [[ ! -f "$kaynak" ]]; then
+    hata "APK bulunamadi: $kaynak"
+    echo "     Once derle:  flutter build apk --release"
+    echo "     Ya da yolu ver:  bash sunucu.sh apk /yol/app-release.apk"
+    exit 1
+  fi
+
+  local boyut
+  boyut="$(du -h "$kaynak" | cut -f1)"
+  bilgi "APK yukleniyor ($boyut) — yavas baglantida birkac dakika surer"
+  echo "  kaynak: $kaynak"
+
+  # Once gecici ada yukleniyor, sonra yerine tasiniyor. Yukleme
+  # yarida kalirsa site bozuk bir dosyayi sunmaya baslamasin.
+  scp -i "$SSH_ANAHTAR" -o StrictHostKeyChecking=accept-new \
+      "$kaynak" "$SUNUCU_KULLANICI@$SUNUCU_IP:/tmp/ebru-yeni.apk"
+
+  uzak '
+    set -e
+    sudo mkdir -p /opt/ebru/web/static/indir
+    sudo mv /tmp/ebru-yeni.apk /opt/ebru/web/static/indir/ebru-ai.apk
+    sudo chown ebru:ebru /opt/ebru/web/static/indir/ebru-ai.apk
+    sudo chmod 644 /opt/ebru/web/static/indir/ebru-ai.apk
+    ls -lh /opt/ebru/web/static/indir/ebru-ai.apk | awk "{print \"  sunucuda: \" \$5}"
+  '
+  ok "APK yayinda"
+
+  bilgi "Kontrol"
+  curl -s -m 60 -r 0-1048575 -o /dev/null \
+    -w "  /apk -> HTTP %{http_code}  hiz: %{speed_download} B/s\n" \
+    https://ebruai.com/apk
+}
+
+
+# ---------------------------------------------------------------
 # ayar — sunucudaki /etc/ebru/ebru.env icine bir deger yaz
 # ---------------------------------------------------------------
 # Gizli degerler (ornegin Resend anahtari) depoya ve betiklere
@@ -267,7 +315,12 @@ komut_ayar() {
   local deger=""
   printf '  %s%s degeri:%s ' "$BOLD" "$anahtar" "$RESET"
   # Gizli okuma: anahtar ekranda ve kabuk gecmisinde gorunmesin.
-  read -rs deger
+  #
+  # "|| true" sart: deger boruyla beslendiginde (echo ... | sunucu.sh
+  # ayar ...) girdi satir sonuyla bitmiyorsa read dosya sonuna carpip
+  # sifirdan farkli donuyor ve "set -e" yuzunden betik sessizce
+  # kapaniyor. Okunan deger yine de elimizde oluyor.
+  read -rs deger || true
   printf '\n'
 
   if [[ -z "$deger" ]]; then
@@ -333,6 +386,7 @@ komut_gunluk() {
 case "${1:-}" in
   guncelle)          komut_guncelle ;;
   ayar)              komut_ayar "$@" ;;
+  apk)               komut_apk "$@" ;;
   veritabani)        komut_veritabani ;;
   veritabani-ozet)   komut_ozet ;;
   durum)             komut_durum ;;
@@ -342,6 +396,7 @@ case "${1:-}" in
     echo
     echo "  guncelle         kodu gonder, veritabanini yedekle, servisi yenile"
     echo "  ayar ANAHTAR     sunucudaki gizli ayari yaz (deger gizli sorulur)"
+    echo "  apk [yol]        yeni APK yi siteye yukle"
     echo "  veritabani       veritabaninin tutarli kopyasini indir"
     echo "  veritabani-ozet  kullanicilari indirmeden listele"
     echo "  durum            servisler, bellek, disk, /health"

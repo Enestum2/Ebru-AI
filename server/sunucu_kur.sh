@@ -295,6 +295,7 @@ ExecStart=$KURULUM_DIZINI/venv/bin/gunicorn \\
     --threads 8 \\
     --timeout 600 \\
     --bind 127.0.0.1:5000 \\
+    --access-logfile - \\
     app:app
 Restart=always
 RestartSec=5

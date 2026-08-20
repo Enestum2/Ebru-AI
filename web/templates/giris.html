@@ -2,7 +2,7 @@
 {% set sayfa = 'giris_sayfasi' %}
 
 {% block baslik %}Ebru AI — Giriş{% endblock %}
-{% block aciklama %}Ebru AI hesabına giriş yap ya da ücretsiz hesap aç.{% endblock %}
+{% block aciklama %}Ebru AI hesabınıza giriş yapın ya da ücretsiz hesap açın.{% endblock %}
 
 {% block icerik %}
 
@@ -18,7 +18,7 @@
              class="w-16 h-16 rounded-xl object-cover ring-1 ring-gold/30 mb-xs">
         <h1 id="baslik" class="font-headline-md text-headline-md text-on-surface">Giriş yap</h1>
         <p id="altBaslik" class="font-body-md text-body-md text-on-surface-variant">
-          Eser üretmek için hesabına giriş yap.
+          Eser üretmek için hesabınıza giriş yapın.
         </p>
       </div>
 
@@ -62,7 +62,7 @@
                           focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
                           px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
             <p class="font-label-sm text-label-sm text-outline">
-              Üretim yapabilmek için bu adresi onaylaman gerekiyor.
+              Üretim yapabilmek için bu adresi onaylamanız gerekiyor.
             </p>
           </div>
         </div>
@@ -102,14 +102,115 @@
         </button>
       </form>
 
+      {# Google ile giris. Bolum bastan gizli: sunucu bu ozelligin acik
+         olup olmadigini /auth/google/durum ile bildiriyor, hesap.js
+         yalnizca acikken gosteriyor. Kapaliyken calismayan bir dugme
+         gostermek kullaniciyi bosuna ugrastirirdi. #}
+      <div id="googleBolumu" class="hidden relative z-10 flex-col gap-sm mt-md">
+        <div class="flex items-center gap-sm">
+          <span class="flex-1 h-px bg-white/10"></span>
+          <span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">ya da</span>
+          <span class="flex-1 h-px bg-white/10"></span>
+        </div>
+        <div id="googleDugme" class="flex justify-center"></div>
+        <div id="googleDurum" class="hidden p-sm rounded-lg font-label-md text-label-md"></div>
+      </div>
+
+      {# Google ile ilk kez girenden kullanici adi isteniyor. Kullanici
+         adi panelde ve uretim kayitlarinda gorunuyor; kisinin kendi
+         sectigi ad daha anlamli oluyor. #}
+      <div id="googleAdPaneli" class="hidden relative z-10 flex-col gap-sm">
+        <div class="flex flex-col items-center text-center gap-xs mb-xs">
+          <span class="material-symbols-outlined text-gold" style="font-size:40px;">
+            badge
+          </span>
+          <h2 class="font-headline-sm text-headline-sm text-on-surface">
+            Kullanıcı adı seç
+          </h2>
+          <p class="font-body-md text-body-md text-on-surface-variant">
+            <span id="googleAdEposta" class="text-on-surface"></span> ile
+            giriş yapıyorsunuz. Son bir adım kaldı.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-xs">
+          <label for="googleKullaniciAdi" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+            Kullanıcı adı
+          </label>
+          <input type="text" id="googleKullaniciAdi" autocomplete="username" maxlength="24"
+                 class="w-full rounded-lg bg-surface-container-low border border-white/10
+                        focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                        px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+          <p class="font-label-sm text-label-sm text-outline">
+            3-24 karakter; harf, rakam, nokta ve alt çizgi.
+          </p>
+        </div>
+
+        <div id="googleAdDurum" class="hidden p-sm rounded-lg font-label-md text-label-md"></div>
+
+        <button type="button" id="googleAdKaydetBtn"
+                class="altin-dugme w-full py-sm rounded-full font-label-md text-label-md
+                       uppercase tracking-wider flex items-center justify-center gap-xs">
+          <span class="dugme-metin relative z-10">Hesabı oluştur</span>
+        </button>
+      </div>
+
       <p id="gecisSatiri" class="relative z-10 text-center font-body-md text-body-md text-on-surface-variant mt-md">
-        <span id="gecisMetin">Hesabın yok mu?</span>
+        <span id="gecisMetin">Hesabınız yok mu?</span>
         <a href="#" id="gecisBtn" class="text-tertiary hover:text-tertiary-fixed font-label-md text-label-md">Kayıt ol</a>
       </p>
+
+      {# Yalnızca giriş kipinde görünüyor; kayıt olurken şifre unutmanın
+         anlamı yok. hesap.js kipiUygula() içinde açıp kapatıyor. #}
+      <p id="sifreUnuttumSatiri" class="relative z-10 text-center mt-xs">
+        <a href="#" id="sifreUnuttumBtn"
+           class="font-label-md text-label-md text-on-surface-variant hover:text-tertiary transition-colors">
+          Şifremi unuttum
+        </a>
+      </p>
+
+      {# Sıfırlama isteği paneli. Formu gizlemek yerine onun yerine
+         geçiyor: kullanıcı hangi ekranda olduğunu karıştırmasın. #}
+      <div id="sifirlamaPaneli" class="hidden relative z-10 flex-col gap-sm">
+        <div class="flex flex-col items-center text-center gap-xs mb-xs">
+          <span class="material-symbols-outlined text-gold" style="font-size:40px;">
+            lock_reset
+          </span>
+          <h2 class="font-headline-sm text-headline-sm text-on-surface">
+            Şifreni sıfırla
+          </h2>
+          <p class="font-body-md text-body-md text-on-surface-variant">
+            Hesabınızın e-posta adresini yazın, sıfırlama bağlantısı gönderelim.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-xs">
+          <label for="sifirlamaEposta" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+            E-posta
+          </label>
+          <input type="email" id="sifirlamaEposta" autocomplete="email" maxlength="254" inputmode="email"
+                 class="w-full rounded-lg bg-surface-container-low border border-white/10
+                        focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                        px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+        </div>
+
+        <div id="sifirlamaDurum" class="hidden p-sm rounded-lg font-label-md text-label-md"></div>
+
+        <button type="button" id="sifirlamaGonderBtn"
+                class="altin-dugme w-full py-sm rounded-full font-label-md text-label-md
+                       uppercase tracking-wider flex items-center justify-center gap-xs">
+          <span class="dugme-metin relative z-10">Bağlantı gönder</span>
+        </button>
+
+        <a href="#" id="sifirlamaVazgecBtn"
+           class="text-center font-label-md text-label-md text-tertiary hover:text-tertiary-fixed">
+          Girişe dön
+        </a>
+      </div>
     </div>
 
     <p class="text-center font-label-sm text-label-sm text-outline mt-md">
-      Hesabın site ve mobil uygulamada ortak çalışır. Günlük üretim hakkı: 3.
+      Hesabınız site ve mobil uygulamada ortak çalışır. Günlük üretim hakkı: 3.
     </p>
   </div>
 </section>

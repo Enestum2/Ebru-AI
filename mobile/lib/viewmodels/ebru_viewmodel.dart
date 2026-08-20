@@ -6,6 +6,7 @@ import 'package:gal/gal.dart';
 import '../models/ebru_design_model.dart';
 import '../models/generation_request_model.dart';
 import '../services/api_service.dart';
+import '../services/google_giris_servisi.dart';
 import '../services/notification_service.dart';
 import '../services/server_directory.dart';
 import '../services/settings_service.dart';
@@ -68,15 +69,53 @@ class EbruViewModel extends ChangeNotifier {
     }
 
     // Yöneticilik sunucudan geliyor; hesap yetkisi değişmişse yansısın.
+    // Yetki artık panelden verilip alınabildiği için bu her açılışta
+    // gerçekten değişebiliyor.
     if (sonuc.isAdmin != _settings.isAdmin) {
       await _settings.setIsAdmin(sonuc.isAdmin);
+      notifyListeners();
+    }
+
+    if (sonuc.emailVerified != epostaOnayli || sonuc.email != eposta) {
+      epostaOnayli = sonuc.emailVerified;
+      eposta = sonuc.email;
+      notifyListeners();
+    }
+
+    if (sonuc.hasPassword != sifresiVar) {
+      sifresiVar = sonuc.hasPassword;
       notifyListeners();
     }
     return true;
   }
 
-  Future<void> register(String username, String password) async {
-    final sonuc = await _api.register(username, password);
+  /// Hesabın kullanılabilir bir şifresi var mı.
+  ///
+  /// Google ile açılmış hesaplarda yok; hesap silme ekranı o zaman
+  /// şifre yerine kullanıcı adı onayı istiyor. Sunucudan geliyor,
+  /// varsayılan "var": eski sunucuya bağlanıldığında şifre sorulması
+  /// daha güvenli davranış.
+  bool sifresiVar = true;
+
+  /// E-posta onaylanmadan üretim yapılamıyor; ekranlar buna bakıyor.
+  bool epostaOnayli = true;
+  String? eposta;
+
+  Future<void> register(
+    String username,
+    String password, {
+    required String ad,
+    required String soyad,
+    required String epostaAdresi,
+  }) async {
+    final sonuc = await _api.register(
+      username,
+      password,
+      ad: ad,
+      soyad: soyad,
+      eposta: epostaAdresi,
+    );
+    eposta = epostaAdresi;
     await _oturumKaydet(sonuc);
   }
 
@@ -85,6 +124,49 @@ class EbruViewModel extends ChangeNotifier {
     await _oturumKaydet(sonuc);
   }
 
+  /// Google ile giriş. Kullanıcı adı gerekiyorsa oturum açılmıyor.
+  Future<GoogleGirisSonucu> googleGiris(String idToken) async {
+    final sonuc = await _api.googleGiris(idToken);
+    if (!sonuc.kullaniciAdiGerekiyor) {
+      await _oturumKaydet(sonuc.oturum!);
+    }
+    return sonuc;
+  }
+
+  Future<void> googleKullaniciAdi(String idToken, String kullaniciAdi) async {
+    final sonuc = await _api.googleKullaniciAdi(idToken, kullaniciAdi);
+    await _oturumKaydet(sonuc);
+  }
+
+  Future<String> dogrulamaGonder() => _api.dogrulamaGonder();
+
+  // --- Google ile giris ---
+  final GoogleGirisServisi _google = GoogleGirisServisi();
+
+  /// Google girisi kullanilabilir mi. Sunucu kapali derse dugme hic
+  /// gosterilmiyor; calismayan bir dugme kullaniciyi bosuna ugrastirir.
+  bool googleKullanilabilir = false;
+
+  Future<void> googleHazirla() async {
+    final durum = await _api.googleDurum();
+    if (!durum.enabled || durum.clientId.isEmpty) {
+      googleKullanilabilir = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      await _google.hazirla(durum.clientId);
+      googleKullanilabilir = true;
+    } catch (_) {
+      // Eklenti hazirlanamadiysa dugmeyi gostermiyoruz.
+      googleKullanilabilir = false;
+    }
+    notifyListeners();
+  }
+
+  /// Google hesabi sectirip belirteci doner. Vazgecilirse null.
+  Future<String?> googleBelirtecAl() => _google.belirtecAl();
+
   Future<void> _oturumKaydet(AuthResult sonuc) async {
     await _settings.saveSession(
       sonuc.token,
@@ -92,11 +174,31 @@ class EbruViewModel extends ChangeNotifier {
       isAdmin: sonuc.isAdmin,
     );
     _api.sessionToken = sonuc.token;
+    epostaOnayli = sonuc.emailVerified;
     notifyListeners();
   }
 
   Future<void> logout() async {
+    // Google oturumu da birakiliyor: yoksa bir sonraki giriste hesap
+    // secme ekrani hic cikmiyor ve baska hesapla girmek mumkun olmuyor.
+    await _google.cikis();
     await _api.logout();
+    await _settings.clearSession();
+    _api.sessionToken = '';
+    notifyListeners();
+  }
+
+  /// Hesabı sunucudan kalıcı olarak siler ve oturumu kapatır.
+  ///
+  /// Sunucu reddederse (şifre yanlış, kurucu yönetici) hata yukarı
+  /// fırlıyor ve yerel oturuma dokunulmuyor: hesap duruyorsa kullanıcı
+  /// da uygulamadan atılmamalı.
+  Future<void> hesabimiSil({String? sifre, String? onay}) async {
+    await _api.hesabimiSil(sifre: sifre, onay: onay);
+
+    // Sunucudaki oturum silme sırasında zaten kapandı; buradan sonrası
+    // çıkışla aynı temizlik.
+    await _google.cikis();
     await _settings.clearSession();
     _api.sessionToken = '';
     notifyListeners();

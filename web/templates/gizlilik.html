@@ -1,0 +1,153 @@
+{% extends "taban.html" %}
+{% set sayfa = 'gizlilik' %}
+
+{% block baslik %}Ebru AI — Gizlilik Politikası{% endblock %}
+{% block aciklama %}Ebru AI hangi verileri topluyor, neden topluyor ve nerede işliyor.{% endblock %}
+
+{% block icerik %}
+
+{# Bu sayfa Google Auth Platform'un yayinlama sarti oldugu icin yazildi,
+   ama icerigi gercek: her madde sistemin fiilen yaptigi seyi anlatiyor.
+   Veri isleyen bir yer eklenir ya da cikarilirsa BURASI da guncellenmeli. #}
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="flex flex-col gap-sm max-w-3xl ac gorundu">
+    <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Yasal</span>
+    <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
+      Gizlilik Politikası
+    </h1>
+    <p class="font-body-lg text-body-lg text-on-surface-variant">
+      Ebru AI, TÜBİTAK 2209-A kapsamında geliştirilen bir öğrenci projesidir.
+      Bu sayfa hangi verileri topladığımızı, neden topladığımızı ve nerede
+      işlediğimizi anlatıyor.
+    </p>
+    <p class="font-label-sm text-label-sm text-outline">Son güncelleme: 20 Ağustos 2026</p>
+  </div>
+</section>
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-md">
+  <div class="max-w-3xl flex flex-col gap-lg ac gorundu">
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Topladığımız veriler</h2>
+      <div class="rounded-xl bg-surface-container-lowest border border-white/5 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left font-body-md text-body-md">
+            <tr class="border-b border-white/10">
+              <th class="px-sm py-xs font-label-sm text-label-sm text-outline uppercase tracking-widest">Veri</th>
+              <th class="px-sm py-xs font-label-sm text-label-sm text-outline uppercase tracking-widest">Ne zaman</th>
+              <th class="px-sm py-xs font-label-sm text-label-sm text-outline uppercase tracking-widest">Niçin</th>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">Ad, soyad</td>
+              <td class="px-sm py-xs text-on-surface-variant">Kayıtta</td>
+              <td class="px-sm py-xs text-on-surface-variant">Hesabı kime ait olduğunu bilmek</td>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">E-posta adresi</td>
+              <td class="px-sm py-xs text-on-surface-variant">Kayıtta</td>
+              <td class="px-sm py-xs text-on-surface-variant">Hesap doğrulama ve şifre sıfırlama</td>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">Kullanıcı adı</td>
+              <td class="px-sm py-xs text-on-surface-variant">Kayıtta</td>
+              <td class="px-sm py-xs text-on-surface-variant">Girişte kimliğin</td>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">Şifre</td>
+              <td class="px-sm py-xs text-on-surface-variant">Kayıtta</td>
+              <td class="px-sm py-xs text-on-surface-variant">Yalnızca karması (scrypt) saklanır; şifrenin kendisi hiçbir yerde tutulmaz</td>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">Google hesap kimliği</td>
+              <td class="px-sm py-xs text-on-surface-variant">Google ile girişte</td>
+              <td class="px-sm py-xs text-on-surface-variant">Hesabını tanımak. Google'dan yalnızca ad, soyad ve e-posta alınır</td>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">Yazdığınız istekler</td>
+              <td class="px-sm py-xs text-on-surface-variant">Üretimde</td>
+              <td class="px-sm py-xs text-on-surface-variant">Görseli üretmek ve hataları incelemek</td>
+            </tr>
+            <tr class="border-b border-white/5">
+              <td class="px-sm py-xs text-on-surface">Günlük üretim sayısı</td>
+              <td class="px-sm py-xs text-on-surface-variant">Üretimde</td>
+              <td class="px-sm py-xs text-on-surface-variant">Günlük hakkınızın takibi</td>
+            </tr>
+            <tr>
+              <td class="px-sm py-xs text-on-surface">IP adresi, istek kayıtları</td>
+              <td class="px-sm py-xs text-on-surface-variant">Her istekte</td>
+              <td class="px-sm py-xs text-on-surface-variant">Sunucu günlükleri; arıza incelemek ve kötüye kullanımı görmek</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Reklam yapmıyoruz, verilerinizi satmıyoruz ve pazarlama amacıyla
+        kimseyle paylaşmıyoruz.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Verilerin nerede işleniyor</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Site ve hesaplar <span class="text-on-surface">Oracle Cloud</span>
+        sunucusunda (Birleşik Krallık, Londra) barındırılıyor. Alan adı ve
+        ağ trafiği <span class="text-on-surface">Cloudflare</span> üzerinden
+        geçiyor. Doğrulama ve şifre sıfırlama postaları
+        <span class="text-on-surface">Resend</span> ile gönderiliyor (Tokyo
+        bölgesi). Google ile giriş yaparsanız kimlik doğrulaması
+        <span class="text-on-surface">Google</span> tarafında yapılıyor.
+      </p>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Görselleri üreten yapay zekâ modeli proje sahibinin Türkiye'deki
+        kendi bilgisayarında çalışıyor; üretim isteğin oraya iletiliyor.
+        Üretilen görseller bu bilgisayarda da saklanıyor.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Ne kadar süre saklanıyor</h2>
+      <ul class="flex flex-col gap-xs font-body-md text-body-md text-on-surface-variant list-disc pl-lg">
+        <li>Hesap bilgileriniz, hesabınız silinene kadar</li>
+        <li>Oturum anahtarların 90 gün</li>
+        <li>E-posta doğrulama bağlantıları 24 saat</li>
+        <li>Şifre sıfırlama bağlantıları 1 saat</li>
+        <li>Sunucu günlükleri sınırlı süre tutulur ve düzenli olarak silinir</li>
+      </ul>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Haklarım neler</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Hakkınızdaki verilere erişmeyi, düzeltilmesini ya da hesabınızın
+        tamamen silinmesini isteyebilirsiniz. Hesabınızı silmek istediğinizde
+        bütün verileriniz (hesap, ad, e-posta, oturumlar, kullanım sayaçları)
+        veritabanından kaldırılır; bu işlem geri alınamaz.
+      </p>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Hesabınızı kendiniz silebilirsiniz:
+        <a href="{{ url_for('hesap_sil') }}"
+           class="text-tertiary hover:text-tertiary-fixed">ebruai.com/hesap-sil</a>
+        adresinden ya da mobil uygulamada Ayarlar &rsaquo; Hesabımı sil
+        yolundan. Dilerseniz talebinizi aşağıdaki e-posta adresine de
+        yazabilirsiniz.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">İletişim</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Gizlilikle ilgili her soru ve talep için:
+        <a href="mailto:tumtumenes@gmail.com"
+           class="text-tertiary hover:text-tertiary-fixed">tumtumenes@gmail.com</a>
+      </p>
+    </div>
+
+    <p class="font-label-sm text-label-sm text-outline">
+      Bu metin, projenin fiilen yaptığı veri işlemeyi anlatmak için
+      yazılmıştır; hukuki danışmanlık yerine geçmez.
+    </p>
+
+  </div>
+</section>
+
+{% endblock %}

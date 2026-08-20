@@ -60,7 +60,7 @@ class NotificationService {
         basarili ? 'Ebrun hazır' : 'Üretim tamamlanamadı',
         basarili
             ? 'Tasarımını görmek için uygulamayı aç'
-            : 'Uygulamayı açıp tekrar deneyebilirsin',
+            : 'Uygulamayı açıp tekrar deneyebilirsiniz',
         detay,
       );
     } catch (e) {

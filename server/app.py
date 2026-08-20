@@ -67,6 +67,7 @@ import requests
 
 import kullanicilar
 import eposta as eposta_servisi
+import google_giris
 # =====================================
 # FLASK AYARLARI
 # =====================================
@@ -395,7 +396,7 @@ def check_rate_limit(kimlik, kullanici=None):
         if gecen < MIN_INTERVAL:
             return (
                 False,
-                "Çok sık istek gönderiyorsun, biraz bekle.",
+                "Çok sık istek gönderiyorsunuz, lütfen biraz bekleyin.",
                 int(MIN_INTERVAL - gecen) + 1,
             )
         _usage[f"son:{kimlik}"] = simdi
@@ -420,8 +421,8 @@ def check_rate_limit(kimlik, kullanici=None):
                 )
             return (
                 False,
-                f"Günlük {hak} üretim hakkın doldu. "
-                "Yarın tekrar deneyebilirsin.",
+                f"Günlük {hak} üretim hakkınız doldu. "
+                "Yarın tekrar deneyebilirsiniz.",
                 None,
             )
         kullanicilar.kullanim_artir(kullanici["id"])
@@ -444,15 +445,15 @@ def check_rate_limit(kimlik, kullanici=None):
         if gecen < MIN_INTERVAL:
             return (
                 False,
-                "Çok sık istek gönderiyorsun, biraz bekle.",
+                "Çok sık istek gönderiyorsunuz, lütfen biraz bekleyin.",
                 int(MIN_INTERVAL - gecen) + 1,
             )
 
         if kayit["sayi"] >= DAILY_LIMIT:
             return (
                 False,
-                f"Günlük {DAILY_LIMIT} üretim hakkın doldu. "
-                "Yarın tekrar deneyebilirsin.",
+                f"Günlük {DAILY_LIMIT} üretim hakkınız doldu. "
+                "Yarın tekrar deneyebilirsiniz.",
                 None,
             )
 
@@ -1573,13 +1574,13 @@ def auth_dogrulama_gonder():
     if not kullanici:
         return jsonify({
             "status": "error",
-            "message": "Oturum açman gerekiyor",
+            "message": "Oturum açmanız gerekiyor",
         }), 401
 
     if kullanici.get("eposta_dogrulandi"):
         return jsonify({
             "status": "success",
-            "message": "E-posta adresin zaten onaylı.",
+            "message": "E-posta adresiniz zaten onaylı.",
             "email_verified": True,
         })
 
@@ -1587,8 +1588,8 @@ def auth_dogrulama_gonder():
         return jsonify({
             "status": "error",
             "message": (
-                "Hesabında kayıtlı e-posta adresi yok. "
-                "Yeni bir hesap açman gerekiyor."
+                "Hesabınızda kayıtlı e-posta adresi yok. "
+                "Yeni bir hesap açmanız gerekiyor."
             ),
         }), 400
 
@@ -1597,7 +1598,7 @@ def auth_dogrulama_gonder():
             "status": "error",
             "message": (
                 "Posta servisi şu anda yapılandırılmamış. "
-                "Lütfen biraz sonra tekrar dene."
+                "Lütfen biraz sonra tekrar deneyin."
             ),
         }), 503
 
@@ -1607,7 +1608,7 @@ def auth_dogrulama_gonder():
     if not kod:
         return jsonify({
             "status": "error",
-            "message": f"Çok sık istedin. {bekle} saniye sonra tekrar dene.",
+            "message": f"Çok sık istediniz. {bekle} saniye sonra tekrar deneyin.",
             "retry_after": bekle,
         }), 429
 
@@ -1618,13 +1619,264 @@ def auth_dogrulama_gonder():
         print(f"✉️  Yeniden gönderim başarısız: {hata}")
         return jsonify({
             "status": "error",
-            "message": "Posta gönderilemedi. Biraz sonra tekrar dene.",
+            "message": "Posta gönderilemedi. Biraz sonra tekrar deneyin.",
         }), 502
 
     return jsonify({
         "status": "success",
-        "message": "Doğrulama bağlantısı e-posta adresine gönderildi.",
+        "message": "Doğrulama bağlantısı e-posta adresinize gönderildi.",
     })
+
+
+def _google_kimligi_coz(data):
+    """İstekteki Google belirtecini doğrular. (bilgi, hata_cevabi) döner."""
+    try:
+        bilgi = google_giris.dogrula(data.get("credential"))
+    except google_giris.GoogleHatasi as e:
+        return None, (jsonify({"status": "error", "message": str(e)}), 400)
+    return bilgi, None
+
+
+@app.route("/auth/google", methods=["POST"])
+def auth_google():
+    """Google ile giriş.
+
+    Üç sonuç var:
+      1. Google kimliği zaten bir hesaba bağlı  -> giriş
+      2. Aynı e-postayla ONAYLI bir hesap var   -> hesaplar birleştirilir
+      3. Hiçbiri                                 -> kullanıcı adı istenir
+    """
+    if not google_giris.yapilandirildi_mi():
+        print(f"⚠️  Google girişi kapalı: {google_giris.eksik_ne()}")
+        return jsonify({
+            "status": "error",
+            "message": "Google ile giriş şu anda kullanılamıyor.",
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    bilgi, hata = _google_kimligi_coz(data)
+    if hata:
+        return hata
+
+    # 1) Daha önce bağlanmış hesap
+    mevcut = kullanicilar.google_ile_bul(bilgi["sub"])
+    if mevcut:
+        token = kullanicilar.oturum_ac_kullanici(mevcut["id"])
+        print(f"🔑 Google girişi: {mevcut['kullanici_adi']}")
+        return _google_cevabi(token, mevcut["kullanici_adi"])
+
+    # 2) Aynı e-postayla açılmış şifreli hesap
+    eslesen = kullanicilar.eposta_ile_bul(bilgi["eposta"])
+    if eslesen:
+        # Onaysız hesaba bağlanmıyoruz. Aksi halde biri başkasının
+        # adresiyle hesap açıp bekleyebilir; adresin gerçek sahibi
+        # Google'la girdiğinde o hesaba düşer ve şifresi saldırganda
+        # olduğu için hesap devralınmış olurdu.
+        if not eslesen["eposta_dogrulandi"]:
+            return jsonify({
+                "status": "error",
+                "message": (
+                    "Bu e-posta adresiyle onaylanmamış bir hesap var. "
+                    "Önce o hesabın e-postasını onaylayın, sonra Google ile "
+                    "giriş yapabilirsiniz."
+                ),
+            }), 409
+
+        kullanicilar.google_bagla(eslesen["id"], bilgi["sub"])
+        token = kullanicilar.oturum_ac_kullanici(eslesen["id"])
+        print(f"🔗 Google hesabı bağlandı: {eslesen['kullanici_adi']}")
+        return _google_cevabi(token, eslesen["kullanici_adi"])
+
+    # 3) Yeni kullanıcı: kullanıcı adı seçmesi gerekiyor.
+    #
+    # Google bilgisi sunucuda saklanmıyor; istemci ikinci istekte aynı
+    # belirteci tekrar gönderiyor ve biz yeniden doğruluyoruz. Böylece
+    # "bekleyen kayıt" diye bir durum tutmak gerekmiyor. Belirtecin
+    # ömrü (~1 saat) bu adım için fazlasıyla yeterli.
+    return jsonify({
+        "status": "username_required",
+        "message": "Son bir adım: kullanıcı adı seçin.",
+        "suggested": (bilgi["eposta"].split("@")[0] or "")[:24],
+        "email": bilgi["eposta"],
+    }), 200
+
+
+@app.route("/auth/google/kullanici-adi", methods=["POST"])
+def auth_google_kullanici_adi():
+    """Google ile gelen yeni kullanıcının hesabını açar."""
+    if not google_giris.yapilandirildi_mi():
+        return jsonify({
+            "status": "error",
+            "message": "Google ile giriş şu anda kullanılamıyor.",
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    bilgi, hata = _google_kimligi_coz(data)
+    if hata:
+        return hata
+
+    # Bu arada başka bir sekmede bağlanmış olabilir.
+    mevcut = kullanicilar.google_ile_bul(bilgi["sub"])
+    if mevcut:
+        token = kullanicilar.oturum_ac_kullanici(mevcut["id"])
+        return _google_cevabi(token, mevcut["kullanici_adi"])
+
+    try:
+        token, ad = kullanicilar.google_kayit(
+            (data.get("username") or "").strip(),
+            bilgi["eposta"],
+            bilgi["sub"],
+            bilgi["ad"],
+            bilgi["soyad"],
+        )
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"👤 Yeni hesap (Google): {ad}")
+    return _google_cevabi(token, ad), 201
+
+
+def _google_cevabi(token, ad):
+    """Google akışının başarı cevabı; giriş/kayıt ile aynı biçimde."""
+    kullanici = kullanicilar.oturumu_coz(token)
+    return jsonify({
+        "status": "success",
+        "token": token,
+        "username": ad,
+        "is_admin": _yonetici_mi(ad),
+        # Google adresi kendisi doğruladığı için bu hesaplar
+        # doğrulanmış geliyor; ön yüz onay ekranına götürmesin.
+        "email_verified": True,
+        "daily_limit": _gunluk_hak(kullanici),
+    })
+
+
+@app.route("/auth/google/durum", methods=["GET"])
+def auth_google_durum():
+    """Ön yüz Google düğmesini gösterip göstermeyeceğini buradan öğreniyor.
+
+    İstemci kimliği gizli değil; sayfaya zaten gömülüyor.
+    """
+    return jsonify({
+        "enabled": google_giris.yapilandirildi_mi(),
+        "client_id": google_giris.ISTEMCI_KIMLIGI,
+    })
+
+
+@app.route("/auth/sifre-unuttum", methods=["POST"])
+def auth_sifre_unuttum():
+    """Şifre sıfırlama bağlantısı ister.
+
+    Adres kayıtlı olsun ya da olmasın AYNI cevabı dönüyor. "Bu adres
+    kayıtlı değil" demek, kimin üye olduğunu isteyen herkese söylerdi;
+    bir adres listesini tek tek deneyerek üyeleri ayıklamak mümkün olurdu.
+    """
+    data = request.get_json(silent=True) or {}
+    eposta = (data.get("email") or "").strip()
+
+    # Google ile açılmış hesabın şifresi yoktur, dolayısıyla
+    # sıfırlanacak bir şey de yok. Bunu kişiye özel söylemek
+    # ("bu hesap Google ile açılmış") adresin kayıtlı olduğunu ele
+    # verirdi; bir adres listesi denenerek üyeler ayıklanabilirdi.
+    # Onun yerine açıklama HERKESE gösterilen ortak mesajın içinde:
+    # kimseyi ayırt etmiyor ama Google kullanıcısı ne yapacağını
+    # anlıyor. Aksi halde hiç gelmeyecek bir postayı bekliyordu.
+    ayni_cevap = jsonify({
+        "status": "success",
+        "message": (
+            "Bu adres kayıtlıysa şifre sıfırlama bağlantısı gönderilmiştir. "
+            "Lütfen gelen kutunuzu ve gereksiz (spam) klasörünüzü "
+            "kontrol ediniz. "
+            "Hesabınızı Google ile açtıysanız şifreniz bulunmamaktadır; "
+            "bu hesaba “Google ile devam et” seçeneğiyle "
+            "giriş yapabilirsiniz."
+        ),
+    })
+
+    if not eposta:
+        return ayni_cevap
+
+    kod, ad = kullanicilar.sifre_kodu_olustur(eposta)
+    if not kod:
+        # Hesap yok, Google hesabı ya da çok sık istendi. Üçünde de
+        # dışarıya aynı cevap gidiyor; ayrım yalnızca günlükte.
+        print(f"🔑 Şifre sıfırlama isteği karşılıksız: {eposta[:3]}***")
+        return ayni_cevap
+
+    if not eposta_servisi.yapilandirildi_mi():
+        print("⚠️  EBRU_RESEND_API_KEY yok; sıfırlama postası gönderilemedi.")
+        return ayni_cevap
+
+    basarili, hata = eposta_servisi.sifirlama_postasi_gonder(eposta, ad, kod)
+    if basarili:
+        print(f"🔑 Şifre sıfırlama postası gönderildi: {ad}")
+    else:
+        print(f"🔑 Şifre sıfırlama postası GÖNDERİLEMEDİ: {hata}")
+
+    return ayni_cevap
+
+
+@app.route("/sifre-sifirla/<token>", methods=["GET"])
+def sifre_sifirla_sayfasi(token):
+    """E-postadaki bağlantı buraya geliyor: yeni şifre formu."""
+    return render_template(
+        "sifre_sifirla.html",
+        token=token,
+        gecerli=kullanicilar.sifre_kodu_gecerli_mi(token),
+    )
+
+
+@app.route("/auth/sifre-sifirla", methods=["POST"])
+def auth_sifre_sifirla():
+    """Yeni şifreyi kaydeder."""
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    yeni = data.get("password") or ""
+
+    try:
+        ad = kullanicilar.sifre_kodu_kullan(token, yeni)
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"🔑 Şifre değiştirildi: {ad}")
+    return jsonify({
+        "status": "success",
+        "message": (
+            "Şifreniz değiştirildi. Güvenlik için açık bütün oturumlar "
+            "kapatıldı; yeni şifrenizle giriş yapabilirsiniz."
+        ),
+    })
+
+
+@app.route("/gizlilik")
+def gizlilik():
+    """Gizlilik politikasi.
+
+    Google Auth Platform uygulamayi yayinlamak icin bu adresi sart
+    kosuyor; icerigi projenin fiilen yaptigi veri islemeyi anlatiyor.
+    Veri isleyen bir yer eklenirse sablon da guncellenmeli.
+    """
+    return render_template("gizlilik.html")
+
+
+@app.route("/kosullar")
+def kosullar():
+    """Kullanim kosullari."""
+    return render_template("kosullar.html")
+
+
+@app.route("/hesap-sil")
+def hesap_sil():
+    """Hesap silme sayfasi.
+
+    Google Play, uygulamayi kurmadan da ulasilabilen bir hesap silme
+    adresi istiyor; altbilgideki baglanti bu yuzden her sayfada var.
+
+    Yetki denetimi yok: sayfa oturumu kendisi yokluyor. Tarayici adres
+    cubugundan Authorization basligi gonderemiyor, yani sunucu tarafinda
+    denetlemek zaten mumkun degil (/admin de ayni sebeple boyle).
+    """
+    return render_template("hesap_sil.html")
 
 
 @app.route("/onay-bekleniyor")
@@ -1740,6 +1992,10 @@ def auth_me():
         "is_admin": _yonetici_mi(kullanici["kullanici_adi"]),
         "email": kullanici.get("eposta"),
         "email_verified": bool(kullanici.get("eposta_dogrulandi")),
+        # Hesap silme ekranı buna bakıyor: şifresi olan hesaptan şifre,
+        # Google hesabından kullanıcı adı onayı isteniyor.
+        "registration_path": kullanici.get("kayit_yolu", "sifre"),
+        "has_password": kullanici.get("kayit_yolu", "sifre") != "google",
     })
 
 
@@ -1749,6 +2005,67 @@ def auth_logout():
     if baslik.startswith("Bearer "):
         kullanicilar.cikis_yap(baslik[7:].strip())
     return jsonify({"status": "success"})
+
+
+@app.route("/auth/hesabimi-sil", methods=["POST"])
+def auth_hesabimi_sil():
+    """Kullanıcının kendi hesabını silmesi.
+
+    Google Play, uygulama içinden hesap silme yolu olmasını şart
+    koşuyor; yöneticiden istemek yetmiyor.
+
+    Son onay hesabın açılış yoluna göre değişiyor:
+      * şifreyle açılan hesap  -> şifresini yazıyor,
+      * Google ile açılan hesap -> kullanıcı adını yazıyor
+        (o hesapların kullanılabilir bir şifresi yok).
+
+    İşlem geri alınamıyor: eserler, sayaçlar ve oturumlar da gidiyor.
+    """
+    kullanici = oturum_kullanicisi()
+    if not kullanici:
+        return jsonify({
+            "status": "error",
+            "message": "Oturum geçersiz",
+        }), 401
+
+    # Kurucu yönetici silinemiyor. Silinirse panele girebilecek kimse
+    # kalmaz ve tek çıkış yolu sunucuda veritabanını elle düzenlemek
+    # olur; yönetici silme ucunda da aynı koruma var.
+    if _kurucu_yonetici_mi(kullanici["kullanici_adi"]):
+        return jsonify({
+            "status": "error",
+            "message": "Kurucu yönetici hesabı silinemez.",
+        }), 400
+
+    veri = request.get_json(silent=True) or {}
+    google_hesabi = kullanici.get("kayit_yolu") == "google"
+
+    if google_hesabi:
+        onay = (veri.get("onay") or "").strip()
+        if onay.lower() != kullanici["kullanici_adi"].lower():
+            return jsonify({
+                "status": "error",
+                "message": "Onaylamak için kullanıcı adınızı yazın.",
+            }), 400
+    else:
+        sifre = veri.get("sifre") or veri.get("password") or ""
+        if not kullanicilar.sifre_dogru_mu(kullanici["id"], sifre):
+            return jsonify({
+                "status": "error",
+                "message": "Şifre yanlış.",
+            }), 400
+
+    ad = kullanici["kullanici_adi"]
+    try:
+        kullanicilar.sil(kullanici["id"])
+    except kullanicilar.KayitHatasi as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    print(f"🗑️  Hesap sahibi tarafından silindi: {ad}")
+    return jsonify({
+        "status": "success",
+        "message": "Hesabınız ve bütün verileriniz silindi.",
+    })
 
 
 @app.route("/register-backend", methods=["POST"])
@@ -1903,7 +2220,7 @@ def _gunluk_hak(kullanici):
 # Yönetici bu denetime takılmıyor; göç sırasında doğrulanmış olarak
 # işaretleniyor ve e-postası hiç olmayacak.
 DOGRULAMA_MESAJI = (
-    "Üretim yapabilmek için e-posta adresini onaylaman gerekiyor."
+    "Üretim yapabilmek için e-posta adresinizi onaylamanız gerekiyor."
 )
 
 
@@ -2102,7 +2419,7 @@ def admin_kullanici_sil(kullanici_id):
     if kendisi and kendisi["id"] == kullanici_id:
         return jsonify({
             "status": "error",
-            "message": "Kendi hesabını panelden silemezsin.",
+            "message": "Kendi hesabınızı panelden silemezsiniz.",
         }), 400
 
     try:
@@ -2403,7 +2720,7 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                     "status": "error",
                     "message": (
                         "Görsel üretim sunucusu şu anda kapalı. "
-                        "Lütfen biraz sonra tekrar dene."
+                        "Lütfen biraz sonra tekrar deneyin."
                     ),
                 }, 503
         # ------------------------------
@@ -2542,7 +2859,7 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                 "status": "error",
                 "message": (
                     "Görsel üretim sunucusu şu anda kapalı. "
-                    "Lütfen biraz sonra tekrar dene."
+                    "Lütfen biraz sonra tekrar deneyin."
                 ),
             }, 503
 
@@ -2606,7 +2923,7 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                 "status": "error",
                 "message": (
                     "Şu anda çok yoğunluk var. "
-                    "Lütfen birkaç dakika sonra tekrar dene."
+                    "Lütfen birkaç dakika sonra tekrar deneyin."
                 ),
             }, 429
         except KuyrukZamanAsimi:
@@ -2616,7 +2933,7 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                 "status": "error",
                 "message": (
                     "Sıra beklerken süre doldu. "
-                    "Lütfen tekrar dene."
+                    "Lütfen tekrar deneyin."
                 ),
             }, 503
         except Exception:
@@ -2838,7 +3155,7 @@ def create_job():
     if not kullanici:
         return jsonify({
             "status": "error",
-            "message": "Oturum açman gerekiyor",
+            "message": "Oturum açmanız gerekiyor",
         }), 401
 
     # Kuyruğa alınmadan önce bakılıyor: iş numarası verip sonra
@@ -2865,8 +3182,8 @@ def create_job():
                 "message": (
                     "Bu hesap için üretim kapalı."
                     if hak == 0
-                    else f"Günlük {hak} üretim hakkın doldu. "
-                         "Yarın tekrar deneyebilirsin."
+                    else f"Günlük {hak} üretim hakkınız doldu. "
+                         "Yarın tekrar deneyebilirsiniz."
                 ),
             }), 429
 
