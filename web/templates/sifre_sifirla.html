@@ -1,0 +1,161 @@
+{% extends "taban.html" %}
+{% set sayfa = 'sifre_sifirla' %}
+
+{% block baslik %}Ebru AI — Şifre sıfırla{% endblock %}
+{% block aciklama %}Ebru AI hesabınız için yeni şifre belirleyin.{% endblock %}
+
+{% block icerik %}
+
+<section class="w-full min-h-[calc(100vh-80px)] flex items-center justify-center px-md py-lg">
+  <div class="w-full max-w-md ac gorundu">
+    <div class="rounded-xl bg-surface-container-lowest border border-white/5 shadow-2xl
+                p-md md:p-lg relative overflow-hidden">
+      <div class="absolute -top-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-[80px] pointer-events-none"></div>
+
+      {% if not gecerli %}
+        {# Belirteç sunucuda daha sayfa açılırken denetleniyor: kullanıcı
+           yeni şifresini yazıp gönderdikten SONRA "bağlantı geçersiz"
+           demek gereksiz bir hayal kırıklığı olurdu. #}
+        <div class="relative z-10 flex flex-col items-center text-center gap-sm">
+          <span class="material-symbols-outlined text-error" style="font-size:56px;">
+            link_off
+          </span>
+          <h1 class="font-headline-md text-headline-md text-on-surface">
+            Bağlantı kullanılamıyor
+          </h1>
+          <p class="font-body-md text-body-md text-on-surface-variant">
+            Bu şifre sıfırlama bağlantısının süresi dolmuş ya da daha önce
+            kullanılmış. Bağlantılar bir saat geçerli.
+          </p>
+          <a href="/giris"
+             class="mt-sm px-lg py-sm rounded-full bg-white/10 hover:bg-white/15
+                    text-on-surface font-label-md text-label-md transition-colors">
+            Giriş sayfasına dön
+          </a>
+          <p class="font-label-sm text-label-sm text-outline">
+            Oradan yeniden şifre sıfırlama isteyebilirsiniz.
+          </p>
+        </div>
+      {% else %}
+        <div class="relative z-10 flex flex-col items-center text-center gap-xs mb-md">
+          <span class="material-symbols-outlined text-gold" style="font-size:48px;">
+            lock_reset
+          </span>
+          <h1 class="font-headline-md text-headline-md text-on-surface">
+            Yeni şifre belirleyin
+          </h1>
+          <p class="font-body-md text-body-md text-on-surface-variant">
+            Yeni şifrenizi iki kez yazın.
+          </p>
+        </div>
+
+        <form id="sifreForm" class="relative z-10 flex flex-col gap-sm">
+          <div class="flex flex-col gap-xs">
+            <label for="yeniSifre" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+              Yeni şifre
+            </label>
+            <input type="password" id="yeniSifre" autocomplete="new-password" required minlength="6"
+                   class="w-full rounded-lg bg-surface-container-low border border-white/10
+                          focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                          px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+          </div>
+
+          <div class="flex flex-col gap-xs">
+            <label for="yeniSifreTekrar" class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+              Yeni şifre (tekrar)
+            </label>
+            <input type="password" id="yeniSifreTekrar" autocomplete="new-password" required minlength="6"
+                   class="w-full rounded-lg bg-surface-container-low border border-white/10
+                          focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30
+                          px-sm py-sm font-body-md text-body-md text-on-surface transition-colors">
+          </div>
+
+          <p class="font-label-sm text-label-sm text-outline">
+            En az 6 karakter. Kaydedince açık bütün oturumlar kapatılır.
+          </p>
+
+          <div id="sifreDurum" class="hidden p-sm rounded-lg font-label-md text-label-md"></div>
+
+          <button type="submit" id="kaydetBtn"
+                  class="altin-dugme w-full py-sm rounded-full font-label-md text-label-md
+                         uppercase tracking-wider flex items-center justify-center gap-xs mt-xs">
+            <span class="dugme-metin relative z-10">Şifreyi kaydet</span>
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('sifreForm');
+  if (!form) return;   // Geçersiz bağlantı ekranı; form yok.
+
+  const durum = document.getElementById('sifreDurum');
+  const dugme = document.getElementById('kaydetBtn');
+  const TOKEN = {{ token | tojson }};
+
+  function durumGoster(mesaj, hataMi) {
+    durum.textContent = mesaj;
+    // Görünürlük sınıfla yönetiliyor: "hidden" özniteliği Tailwind'in
+    // display sınıflarını ezemiyor.
+    durum.classList.remove('hidden');
+    durum.classList.toggle('bg-error/10', hataMi);
+    durum.classList.toggle('border-error/30', hataMi);
+    durum.classList.toggle('text-error', hataMi);
+    durum.classList.toggle('bg-gold/10', !hataMi);
+    durum.classList.toggle('border-gold/30', !hataMi);
+    durum.classList.toggle('text-on-surface', !hataMi);
+    durum.classList.add('border');
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const s1 = document.getElementById('yeniSifre').value;
+    const s2 = document.getElementById('yeniSifreTekrar').value;
+
+    if (s1 !== s2) {
+      durumGoster('İki şifre birbirini tutmuyor.', true);
+      return;
+    }
+
+    dugme.disabled = true;
+    dugme.querySelector('.dugme-metin').textContent = 'Kaydediliyor...';
+
+    try {
+      const cevap = await fetch('/auth/sifre-sifirla', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: TOKEN, password: s1 }),
+      });
+      const veri = await cevap.json().catch(() => ({}));
+
+      if (cevap.ok) {
+        // Eski oturum anahtarı sunucuda kapatıldı; tarayıcıdaki
+        // kopyayı da temizle, yoksa kullanıcı "giriş yapmış" görünür
+        // ama her istek 401 döner.
+        // typeof ile yoklaniyor: hesap.js nesneyi const ile tanimliyor,
+        // "window.EbruHesap" hep undefined donuyor ve bu satir sessizce
+        // atlaniyordu (belirtec tarayicida kaliyordu).
+        if (typeof EbruHesap !== 'undefined') EbruHesap.temizle();
+        // "hidden" ozniteligi formun "flex" sinifini ezemiyor; gizleme
+        // sinifla yapilmali, yoksa form ekranda kalmaya devam ediyor.
+        form.classList.add('hidden');
+        form.classList.remove('flex');
+        durumGoster(veri.message || 'Şifreniz değiştirildi.', false);
+        setTimeout(() => { location.href = '/giris'; }, 2500);
+      } else {
+        durumGoster(veri.message || 'Şifre değiştirilemedi.', true);
+      }
+    } catch (hata) {
+      durumGoster('Sunucuya ulaşılamadı.', true);
+    } finally {
+      dugme.disabled = false;
+      dugme.querySelector('.dugme-metin').textContent = 'Şifreyi kaydet';
+    }
+  });
+});
+</script>
+
+{% endblock %}

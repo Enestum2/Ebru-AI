@@ -168,6 +168,29 @@ def _goc_uygula(db):
         "ON dogrulama_kodlari(kullanici_id)"
     )
 
+    # Şifre sıfırlama bağlantıları.
+    #
+    # E-posta doğrulamayla aynı tabloyu paylaşmıyor: ikisinin ömrü ve
+    # anlamı farklı. Doğrulama bağlantısı 24 saat yaşıyor ve ele
+    # geçirilse en fazla bir adresi onaylatır; şifre bağlantısı ise
+    # hesabı doğrudan devralmaya yarıyor, o yüzden çok daha kısa ömürlü.
+    # Aynı tabloda tutup "tip" alanıyla ayırmak, bir sorgu unutulduğunda
+    # bu iki süreyi karıştırma riski doğuruyordu.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS sifre_kodlari (
+            token          TEXT PRIMARY KEY,
+            kullanici_id   INTEGER NOT NULL,
+            olusturma      REAL NOT NULL,
+            son_gecerlilik REAL NOT NULL,
+            kullanildi     INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (kullanici_id) REFERENCES kullanicilar(id)
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS sifre_kodu_kullanici "
+        "ON sifre_kodlari(kullanici_id)"
+    )
+
     # Yönetici hesabı doğrulamadan muaf (karar: 19 Ağustos 2026).
     # E-postası yok ve olmayacak; hiçbir akışta takılmaması için
     # doğrulanmış sayılıyor. Karşılaştırma büyük/küçük harf duyarsız,
@@ -232,7 +255,7 @@ def _dogrula(kullanici_adi, sifre):
     if not KULLANICI_ADI_DESENI.match(kullanici_adi or ""):
         raise KayitHatasi(
             "Kullanıcı adı 3-24 karakter olmalı; harf, rakam, "
-            "nokta ve alt çizgi kullanabilirsin."
+            "nokta ve alt çizgi kullanabilirsiniz."
         )
     if len(sifre or "") < EN_KISA_SIFRE:
         raise KayitHatasi(
@@ -265,7 +288,7 @@ def _eposta_dogrula(eposta):
     """
     eposta = (eposta or "").strip().lower()
     if not EPOSTA_DESENI.match(eposta) or len(eposta) > 254:
-        raise KayitHatasi("Geçerli bir e-posta adresi gir.")
+        raise KayitHatasi("Geçerli bir e-posta adresi girin.")
     return eposta
 
 
@@ -283,7 +306,7 @@ def kayit_ol(kullanici_adi, sifre, ad=None, soyad=None, eposta=None):
         raise KayitHatasi(
             "Kayıt için ad, soyad ve e-posta gerekiyor. "
             "Uygulamanın bu sürümü bunları gönderemiyor; "
-            "hesabını ebruai.com üzerinden açabilirsin."
+            "hesabınızı ebruai.com üzerinden açabilirsiniz."
         )
 
     ad = _ad_dogrula(ad, "Ad")
@@ -306,7 +329,7 @@ def kayit_ol(kullanici_adi, sifre, ad=None, soyad=None, eposta=None):
         if eposta_var:
             raise KayitHatasi(
                 "Bu e-posta adresiyle zaten bir hesap var. "
-                "Giriş yapmayı dene."
+                "Giriş yapmayı deneyin."
             )
 
         imlec = db.execute(
@@ -384,7 +407,7 @@ def oturumu_coz(token):
         satir = db.execute(
             "SELECT o.token, o.kullanici_id, o.olusturma, "
             "       k.kullanici_adi, k.eposta, k.eposta_dogrulandi, "
-            "       k.yonetici, k.gunluk_limit "
+            "       k.yonetici, k.gunluk_limit, k.kayit_yolu "
             "FROM oturumlar o JOIN kullanicilar k ON k.id = o.kullanici_id "
             "WHERE o.token = ?",
             (token,),
@@ -416,6 +439,10 @@ def oturumu_coz(token):
         # NULL ise genel günlük hak geçerli. 0 geçerli bir değer,
         # bu yüzden "or" ile varsayılana düşülmemeli.
         "gunluk_limit": satir["gunluk_limit"],
+        # "sifre" ya da "google". Google hesabının kullanılabilir bir
+        # şifresi yok (kayıtta rastgele bir değer atanıyor), o yüzden
+        # hesap silmede şifre yerine kullanıcı adı onayı isteniyor.
+        "kayit_yolu": satir["kayit_yolu"] or "sifre",
     }
 
 
@@ -498,7 +525,7 @@ def dogrulama_kodu_kullan(token):
         if not satir:
             raise KayitHatasi(
                 "Bu doğrulama bağlantısı geçersiz. "
-                "Giriş yapıp yeni bağlantı isteyebilirsin."
+                "Giriş yapıp yeni bağlantı isteyebilirsiniz."
             )
 
         if satir["eposta_dogrulandi"]:
@@ -508,13 +535,13 @@ def dogrulama_kodu_kullan(token):
         if satir["kullanildi"]:
             raise KayitHatasi(
                 "Bu bağlantı daha önce kullanılmış ya da yerine yenisi "
-                "gönderilmiş. Giriş yapıp yeni bağlantı isteyebilirsin."
+                "gönderilmiş. Giriş yapıp yeni bağlantı isteyebilirsiniz."
             )
 
         if simdi > satir["son_gecerlilik"]:
             raise KayitHatasi(
                 "Bu bağlantının süresi dolmuş. "
-                "Giriş yapıp yeni bağlantı isteyebilirsin."
+                "Giriş yapıp yeni bağlantı isteyebilirsiniz."
             )
 
         # Belirteç gönderildiği adrese ait. Kullanıcı arada e-postasını
@@ -522,7 +549,7 @@ def dogrulama_kodu_kullan(token):
         if (satir["guncel_eposta"] or "") != satir["eposta"]:
             raise KayitHatasi(
                 "Bu bağlantı başka bir e-posta adresi için gönderilmiş. "
-                "Giriş yapıp yeni bağlantı iste."
+                "Giriş yapıp yeni bağlantı isteyin."
             )
 
         db.execute(
@@ -606,6 +633,7 @@ def hepsi():
                    k.yonetici,
                    k.gunluk_limit,
                    k.kayit_yolu,
+                   k.google_sub,
                    k.olusturma,
                    k.son_giris,
                    COALESCE(b.sayi, 0)   AS bugun,
@@ -636,6 +664,9 @@ def hepsi():
             "yonetici": bool(s["yonetici"]),
             "gunluk_limit": s["gunluk_limit"],
             "kayit_yolu": s["kayit_yolu"],
+            # Sifreyle acilmis bir hesap sonradan Google'a baglanmis
+            # olabilir; kayit_yolu tek basina bunu gostermiyor.
+            "google_bagli": bool(s["google_sub"]),
             "olusturma": s["olusturma"],
             "son_giris": s["son_giris"],
             "bugun": s["bugun"],
@@ -651,6 +682,254 @@ def kullanici_sayisi():
             "SELECT COUNT(*) AS n FROM kullanicilar"
         ).fetchone()
     return satir["n"]
+
+
+# =====================================
+# GOOGLE İLE GİRİŞ
+# =====================================
+def google_ile_bul(sub):
+    """Google kimliğine bağlı hesabı bulur."""
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT id, kullanici_adi FROM kullanicilar WHERE google_sub = ?",
+            (sub,),
+        ).fetchone()
+    return dict(satir) if satir else None
+
+
+def eposta_ile_bul(eposta):
+    """E-posta adresine kayıtlı hesabı bulur."""
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT id, kullanici_adi, eposta_dogrulandi, kayit_yolu, "
+            "       google_sub "
+            "FROM kullanicilar WHERE eposta = ? COLLATE NOCASE",
+            ((eposta or "").strip().lower(),),
+        ).fetchone()
+    return dict(satir) if satir else None
+
+
+def google_bagla(kullanici_id, sub):
+    """Var olan hesaba Google kimliğini bağlar."""
+    with _lock, _baglan() as db:
+        db.execute(
+            "UPDATE kullanicilar SET google_sub = ? WHERE id = ?",
+            (sub, kullanici_id),
+        )
+
+
+def google_kayit(kullanici_adi, eposta, sub, ad=None, soyad=None):
+    """Google ile yeni hesap açar.
+
+    Şifre alanı boş bırakılamıyor (NOT NULL), o yüzden kimsenin
+    bilmediği rastgele bir değerin karması yazılıyor. Bu hesaba
+    şifreyle girmek mümkün değil; şifre sıfırlama da `kayit_yolu`
+    'google' olduğu için reddediliyor. İkisi bilerek böyle: hesabın
+    tek kapısı Google.
+
+    E-posta doğrulanmış sayılıyor, çünkü Google'ın kendisi doğruladı.
+    """
+    # Ad ve soyad Google'dan geliyor; boş olabilirler ama doluysa
+    # bizim biçim kurallarımıza uymalılar.
+    if ad:
+        _ad_dogrula(ad, "Ad")
+    if soyad:
+        _ad_dogrula(soyad, "Soyad")
+
+    if not KULLANICI_ADI_DESENI.match(kullanici_adi or ""):
+        raise KayitHatasi(
+            "Kullanıcı adı 3-24 karakter olmalı; harf, rakam, "
+            "nokta ve alt çizgi kullanabilirsiniz."
+        )
+
+    temiz_eposta = (eposta or "").strip().lower()
+    simdi = time.time()
+
+    with _lock, _baglan() as db:
+        var = db.execute(
+            "SELECT 1 FROM kullanicilar "
+            "WHERE kullanici_adi = ? COLLATE NOCASE",
+            (kullanici_adi,),
+        ).fetchone()
+        if var:
+            raise KayitHatasi("Bu kullanıcı adı alınmış, başka bir tane seçin.")
+
+        try:
+            imlec = db.execute(
+                "INSERT INTO kullanicilar "
+                "(kullanici_adi, sifre_hash, olusturma, eposta, ad, soyad, "
+                " eposta_dogrulandi, kayit_yolu, google_sub) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1, 'google', ?)",
+                (
+                    kullanici_adi,
+                    generate_password_hash(secrets.token_urlsafe(32)),
+                    simdi,
+                    temiz_eposta,
+                    ad,
+                    soyad,
+                    sub,
+                ),
+            )
+        except sqlite3.IntegrityError:
+            raise KayitHatasi(
+                "Bu e-posta adresi ya da hesap zaten kayıtlı."
+            )
+
+        kullanici_id = imlec.lastrowid
+
+    return _oturum_ac(kullanici_id), kullanici_adi
+
+
+def kullanici_adi_musait_mi(kullanici_adi):
+    """Kullanıcı adı alınmış mı (Google akışında ön denetim için)."""
+    if not KULLANICI_ADI_DESENI.match(kullanici_adi or ""):
+        return False
+    with _lock, _baglan() as db:
+        var = db.execute(
+            "SELECT 1 FROM kullanicilar "
+            "WHERE kullanici_adi = ? COLLATE NOCASE",
+            (kullanici_adi,),
+        ).fetchone()
+    return var is None
+
+
+def oturum_ac_kullanici(kullanici_id):
+    """Var olan hesap için oturum anahtarı üretir (Google girişi)."""
+    return _oturum_ac(kullanici_id)
+
+
+# =====================================
+# ŞİFRE SIFIRLAMA
+# =====================================
+# Doğrulama bağlantısından belirgin şekilde kısa. Bu bağlantı hesabı
+# devralmaya yarıyor; posta kutusu bir süre açık kalmış bir bilgisayarda
+# 24 saat boyunca geçerli olmasını istemiyoruz.
+SIFRE_KODU_SURESI = 60 * 60          # 1 saat
+SIFRE_KODU_BEKLEME = 120             # iki istek arası
+
+
+def sifre_kodu_olustur(eposta):
+    """E-posta adresine ait hesap için sıfırlama belirteci üretir.
+
+    Döner: (token, kullanici_adi) ya da (None, None).
+
+    ÇAĞIRAN TARAFA NOT: sonuç ne olursa olsun kullanıcıya aynı mesaj
+    gösterilmeli. "Bu adres kayıtlı değil" demek, kimin üye olduğunu
+    dışarıya sızdırır.
+    """
+    simdi = time.time()
+    temiz = (eposta or "").strip().lower()
+    if not temiz:
+        return None, None
+
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT id, kullanici_adi, kayit_yolu FROM kullanicilar "
+            "WHERE eposta = ? COLLATE NOCASE",
+            (temiz,),
+        ).fetchone()
+
+        if not satir:
+            return None, None
+
+        # Google ile açılmış hesabın şifresi yok; sıfırlanacak bir şey
+        # de yok. (Faz 3 geldiğinde bu dal anlam kazanacak.)
+        if satir["kayit_yolu"] == "google":
+            return None, None
+
+        son = db.execute(
+            "SELECT olusturma FROM sifre_kodlari "
+            "WHERE kullanici_id = ? ORDER BY olusturma DESC LIMIT 1",
+            (satir["id"],),
+        ).fetchone()
+        if son and simdi - son["olusturma"] < SIFRE_KODU_BEKLEME:
+            return None, None
+
+        # Önceki bağlantılar geçersiz: aynı anda birden fazla geçerli
+        # sıfırlama bağlantısı dolaşmasın.
+        db.execute(
+            "UPDATE sifre_kodlari SET kullanildi = 1 "
+            "WHERE kullanici_id = ? AND kullanildi = 0",
+            (satir["id"],),
+        )
+
+        token = secrets.token_urlsafe(32)
+        db.execute(
+            "INSERT INTO sifre_kodlari "
+            "(token, kullanici_id, olusturma, son_gecerlilik) "
+            "VALUES (?, ?, ?, ?)",
+            (token, satir["id"], simdi, simdi + SIFRE_KODU_SURESI),
+        )
+
+    return token, satir["kullanici_adi"]
+
+
+def sifre_kodu_gecerli_mi(token):
+    """Belirteç kullanılabilir durumda mı (sayfayı göstermeden önce)."""
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT kullanildi, son_gecerlilik FROM sifre_kodlari "
+            "WHERE token = ?",
+            (token,),
+        ).fetchone()
+    return bool(
+        satir
+        and not satir["kullanildi"]
+        and time.time() <= satir["son_gecerlilik"]
+    )
+
+
+def sifre_kodu_kullan(token, yeni_sifre):
+    """Belirteci harcar ve şifreyi değiştirir.
+
+    Bütün oturumlar da kapatılıyor. Sebep: şifreyi sıfırlatan kişi
+    genelde hesabının başkasının elinde olmasından şüpheleniyor.
+    Eski oturum anahtarları açık kalsaydı şifre değişse bile o kişi
+    içeride kalırdı.
+    """
+    if len(yeni_sifre or "") < EN_KISA_SIFRE:
+        raise KayitHatasi(
+            "Şifre en az %d karakter olmalı." % EN_KISA_SIFRE
+        )
+
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT kullanici_id, kullanildi, son_gecerlilik "
+            "FROM sifre_kodlari WHERE token = ?",
+            (token,),
+        ).fetchone()
+
+        if not satir or satir["kullanildi"]:
+            raise KayitHatasi(
+                "Bu bağlantı geçersiz ya da daha önce kullanılmış. "
+                "Yeniden şifre sıfırlama isteyebilirsiniz."
+            )
+
+        if time.time() > satir["son_gecerlilik"]:
+            raise KayitHatasi(
+                "Bu bağlantının süresi dolmuş. "
+                "Yeniden şifre sıfırlama isteyebilirsiniz."
+            )
+
+        db.execute(
+            "UPDATE kullanicilar SET sifre_hash = ? WHERE id = ?",
+            (generate_password_hash(yeni_sifre), satir["kullanici_id"]),
+        )
+        db.execute(
+            "UPDATE sifre_kodlari SET kullanildi = 1 WHERE token = ?",
+            (token,),
+        )
+        db.execute(
+            "DELETE FROM oturumlar WHERE kullanici_id = ?",
+            (satir["kullanici_id"],),
+        )
+
+        ad = db.execute(
+            "SELECT kullanici_adi FROM kullanicilar WHERE id = ?",
+            (satir["kullanici_id"],),
+        ).fetchone()
+
+    return ad["kullanici_adi"] if ad else None
 
 
 # =====================================
@@ -721,6 +1000,28 @@ def limit_ayarla(kullanici_id, deger):
         raise KayitHatasi("Kullanıcı bulunamadı.")
 
 
+def sifre_dogru_mu(kullanici_id, sifre):
+    """Verilen şifre bu hesabın şifresi mi.
+
+    Kimlik numarasıyla çalışıyor: `giris_yap` kullanıcı adı istiyor,
+    oysa oturum açmış kişinin numarası zaten elimizde. Hesap silme
+    gibi geri dönüşü olmayan işlemlerde son bir onay için var.
+
+    Google ile açılmış hesaplarda şifre alanı rastgele bir değerle
+    dolu; bu fonksiyon oralarda her zaman False döner, çağıran taraf
+    onu `kayit_yolu` ile ayırt etmeli.
+    """
+    with _lock, _baglan() as db:
+        satir = db.execute(
+            "SELECT sifre_hash FROM kullanicilar WHERE id = ?",
+            (kullanici_id,),
+        ).fetchone()
+
+    if not satir:
+        return False
+    return check_password_hash(satir["sifre_hash"], sifre or "")
+
+
 def sil(kullanici_id):
     """Hesabı ve ona bağlı her şeyi siler.
 
@@ -737,6 +1038,12 @@ def sil(kullanici_id):
         )
         db.execute(
             "DELETE FROM dogrulama_kodlari WHERE kullanici_id = ?",
+            (kullanici_id,),
+        )
+        # Şifre sıfırlama bağlantıları da gidiyor: kalırlarsa silinmiş
+        # bir numaraya işaret eden geçerli bağlantılar dolaşır.
+        db.execute(
+            "DELETE FROM sifre_kodlari WHERE kullanici_id = ?",
             (kullanici_id,),
         )
         imlec = db.execute(

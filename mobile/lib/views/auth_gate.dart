@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/ebru_viewmodel.dart';
 import 'app_shell.dart';
+import 'dogrulama_view.dart';
 import 'login_view.dart';
 
 /// Oturum durumuna göre giriş ekranını ya da uygulamayı gösterir.
@@ -47,6 +48,13 @@ class _AuthGateState extends State<AuthGate> {
       );
     }
 
-    return viewModel.isLoggedIn ? const AppShell() : const LoginView();
+    if (!viewModel.isLoggedIn) return const LoginView();
+
+    // Oturum var ama e-posta onaylanmamış: üretim uçları bu hesabı
+    // reddediyor. Uygulamaya alıp sonunda hata göstermek yerine ne
+    // yapması gerektiğini anlatan ekrana götürüyoruz.
+    if (!viewModel.epostaOnayli) return const DogrulamaView();
+
+    return const AppShell();
   }
 }

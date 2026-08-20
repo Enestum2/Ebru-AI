@@ -26,8 +26,8 @@ body { overscroll-behavior-y: none; }
 /* Koyu zemine uygun ince kaydırma çubuğu. */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: #000e23; }
-::-webkit-scrollbar-thumb { background: #1e3654; border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: #233a59; }
+::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
 /* ------------------------------------------------------------------
    Akışkan zemin — suya damlatılmış boyanın yayılması
@@ -357,3 +357,7 @@ footer { margin-top: 8rem;
 }
 /* Dolu kisimdaki centikler altin izin uzerinde koyu duruyor. */
 .kaydirici-centik.dolu { background: rgba(0, 20, 44, 0.45); }
+.actif .kaydirici-centik.dolu { background: var(--gold); 
+                                cursor: pointer;
+                                scroll-snap-align: center;
+                                container: var(--gold);}

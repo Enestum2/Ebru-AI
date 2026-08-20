@@ -83,7 +83,7 @@ class _BosDurum extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             favoriFiltresi
-                ? 'Henüz favori eserin yok'
+                ? 'Henüz favori eseriniz yok'
                 : 'Atölyen henüz boş',
             style: EbruText.headlineSmall,
             textAlign: TextAlign.center,
@@ -242,7 +242,7 @@ class _GaleriKarti extends StatelessWidget {
         backgroundColor: EbruColors.surfaceHigh,
         title: Text('Eseri sil', style: EbruText.headlineSmall),
         content: Text(
-          'Bu eseri galeriden silmek istediğine emin misin?',
+          'Bu eseri galeriden silmek istediğinize emin misiniz?',
           style: EbruText.bodyMedium,
         ),
         actions: [

@@ -169,7 +169,7 @@ class _ResultViewState extends State<ResultView> {
               Text('Tebrikler', style: EbruText.headlineSmall),
               const SizedBox(height: 4),
               Text(
-                'Benzersiz eserin hazır.',
+                'Benzersiz eseriniz hazır.',
                 style: EbruText.bodyMedium,
               ),
             ],

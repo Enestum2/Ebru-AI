@@ -145,3 +145,64 @@ def dogrulama_postasi_gonder(alici, ad, token):
     ) % (selam, baglanti)
 
     return gonder(alici, "Ebru AI — e-posta adresini onayla", html, duz)
+
+
+# ---------------------------------------------------------------
+# Şifre sıfırlama
+# ---------------------------------------------------------------
+def sifirlama_baglantisi(token):
+    return "%s/sifre-sifirla/%s" % (SITE_URL, token)
+
+
+def sifirlama_postasi_gonder(alici, ad, token):
+    """Şifre sıfırlama bağlantısını yollar."""
+    baglanti = sifirlama_baglantisi(token)
+    selam = ("Merhaba %s," % ad) if ad else "Merhaba,"
+
+    html = """
+<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+            background:#0b1220;padding:32px 16px;">
+  <div style="max-width:520px;margin:0 auto;background:#111a2e;
+              border:1px solid rgba(255,255,255,0.08);border-radius:14px;
+              padding:32px;color:#e6e9f0;">
+    <p style="margin:0 0 8px;font-size:13px;letter-spacing:2px;
+              text-transform:uppercase;color:#c9a227;">Ebru AI</p>
+    <h1 style="margin:0 0 16px;font-size:22px;color:#ffffff;">
+      Sifreni sifirla
+    </h1>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#b9c0cf;">
+      %s hesabin icin sifre sifirlama istegi aldik. Yeni sifreni
+      belirlemek icin asagidaki dugmeye tikla.
+    </p>
+    <p style="margin:0 0 24px;">
+      <a href="%s"
+         style="display:inline-block;background:#c9a227;color:#1a1300;
+                text-decoration:none;font-weight:600;font-size:15px;
+                padding:12px 24px;border-radius:999px;">
+        Yeni sifre belirle
+      </a>
+    </p>
+    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#8b93a5;">
+      Dugme calismazsa bu baglantiyi tarayicina yapistir:
+    </p>
+    <p style="margin:0 0 24px;font-size:13px;word-break:break-all;
+              color:#7aa2f7;">%s</p>
+    <p style="margin:0;font-size:13px;line-height:1.6;color:#8b93a5;">
+      <strong style="color:#e6e9f0;">Baglanti 1 saat gecerli.</strong>
+      Bu istegi sen yapmadiysan hicbir sey yapmana gerek yok; sifren
+      degismedi ve bu baglanti kullanilmadikca gecersiz olacak.
+    </p>
+  </div>
+</div>
+""" % (selam, baglanti, baglanti)
+
+    duz = (
+        "%s\n\n"
+        "Ebru AI hesabin icin sifre sifirlama istegi aldik. Yeni sifreni\n"
+        "belirlemek icin:\n\n"
+        "%s\n\n"
+        "Baglanti 1 saat gecerli. Bu istegi sen yapmadiysan hicbir sey\n"
+        "yapmana gerek yok; sifren degismedi.\n"
+    ) % (selam, baglanti)
+
+    return gonder(alici, "Ebru AI — sifre sifirlama", html, duz)

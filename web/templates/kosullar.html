@@ -1,0 +1,109 @@
+{% extends "taban.html" %}
+{% set sayfa = 'kosullar' %}
+
+{% block baslik %}Ebru AI — Kullanım Koşulları{% endblock %}
+{% block aciklama %}Ebru AI'ı kullanırken geçerli olan koşullar.{% endblock %}
+
+{% block icerik %}
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="flex flex-col gap-sm max-w-3xl ac gorundu">
+    <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— Yasal</span>
+    <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
+      Kullanım Koşulları
+    </h1>
+    <p class="font-body-lg text-body-lg text-on-surface-variant">
+      Ebru AI'ı kullanarak aşağıdaki koşulları kabul etmiş olursunuz.
+    </p>
+    <p class="font-label-sm text-label-sm text-outline">Son güncelleme: 20 Ağustos 2026</p>
+  </div>
+</section>
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-md">
+  <div class="max-w-3xl flex flex-col gap-lg ac gorundu">
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Bu nedir</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Ebru AI, Türk ebru sanatını üreten bir yapay zekâ uygulamasıdır ve
+        TÜBİTAK 2209-A kapsamında geliştirilen bir öğrenci projesidir.
+        Ticari bir hizmet değildir, ücretsizdir.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Hesap</h2>
+      <ul class="flex flex-col gap-xs font-body-md text-body-md text-on-surface-variant list-disc pl-lg">
+        <li>Hesap açmak için geçerli bir e-posta adresi gerekiyor ve adresi onaylaman isteniyor.</li>
+        <li>Şifrenizin güvenliğinden siz sorumlusunuz. Hesabınızın başkasınca kullanıldığını düşünüyorsanız şifrenizi sıfırlayın.</li>
+        <li>Başkasının adına ya da yanıltıcı bilgilerle hesap açmayın.</li>
+      </ul>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Üretim hakkı</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Görseller tek bir ekran kartında, sırayla üretiliyor. Herkesin
+        kullanabilmesi için günlük üretim hakkı sınırlıdır (varsayılan
+        olarak günde 3). Bu sınır kişiye göre değiştirilebilir.
+      </p>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Üretim, proje sahibinin bilgisayarı açık olduğunda çalışır. Kapalı
+        olduğu zamanlarda site açık kalır ama üretim yapılamaz. Hizmetin
+        kesintisiz olacağına dair bir taahhüt verilmiyor.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Kabul edilmeyen kullanım</h2>
+      <ul class="flex flex-col gap-xs font-body-md text-body-md text-on-surface-variant list-disc pl-lg">
+        <li>Yasa dışı, nefret söylemi içeren, müstehcen ya da başkalarına zarar veren içerik üretmek</li>
+        <li>Sistemi otomatik araçlarla zorlamak, sınırları aşmaya çalışmak</li>
+        <li>Başka kullanıcıların hesaplarına erişmeye çalışmak</li>
+      </ul>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Bu kurallara uymayan hesaplar uyarı yapılmadan kapatılabilir.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Ürettiğin görseller</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Ürettiğiniz görselleri kişisel olarak kullanabilir ve paylaşabilirsiniz.
+        Görseller bir yapay zekâ modeliyle üretiliyor; sonuçların benzersiz
+        olacağı ya da belirli bir kalitede olacağı garanti edilmiyor.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Sorumluluk</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Uygulama olduğu gibi sunuluyor. Öğrenci projesi olması sebebiyle
+        kesinti, veri kaybı ya da hatalı çıktı olabilir. Önemli
+        gördüğünüz görselleri kendi cihazınıza indirmeniz önerilir.
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-sm">
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">İletişim</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Sorular ve hesap silme talepleri için:
+        <a href="mailto:tumtumenes@gmail.com"
+           class="text-tertiary hover:text-tertiary-fixed">tumtumenes@gmail.com</a>
+      </p>
+      <p class="font-body-md text-body-md text-on-surface-variant">
+        Verilerinin nasıl işlendiğini
+        <a href="/gizlilik" class="text-tertiary hover:text-tertiary-fixed">Gizlilik Politikası</a>
+        sayfasında bulabilirsiniz.
+      </p>
+    </div>
+
+    <p class="font-label-sm text-label-sm text-outline">
+      Bu metin projenin işleyişini anlatmak için yazılmıştır; hukuki
+      danışmanlık yerine geçmez.
+    </p>
+
+  </div>
+</section>
+
+{% endblock %}

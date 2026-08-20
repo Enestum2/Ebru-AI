@@ -101,6 +101,122 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
+  /// Hesap menüsü: kullanıcı adı, hesabı sil, çıkış.
+  ///
+  /// Sitedeki profil simgesinin açtığı menüyle aynı seçenekleri
+  /// veriyor; iki yüzün aynı yerde aynı şeyi sunması bekleniyor.
+  void _hesapMenusu(BuildContext context, EbruViewModel viewModel) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: EbruColors.surfaceHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(EbruShape.radiusXl),
+        ),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: EbruColors.outline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline,
+                    size: 20,
+                    color: EbruColors.gold,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Giriş yapıldı',
+                          style: EbruText.labelSmall.copyWith(
+                            color: EbruColors.outline,
+                          ),
+                        ),
+                        Text(
+                          viewModel.username.isEmpty
+                              ? 'Oturum açık'
+                              : viewModel.username,
+                          style: EbruText.bodyLarge.copyWith(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_forever_outlined,
+                color: EbruColors.error,
+              ),
+              title: Text(
+                'Hesabımı sil',
+                style: EbruText.bodyLarge.copyWith(
+                  fontSize: 15,
+                  color: EbruColors.error,
+                ),
+              ),
+              subtitle: Text(
+                'Hesap ve bütün veriler kalıcı olarak silinir',
+                style: EbruText.labelSmall.copyWith(
+                  color: EbruColors.outline,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _hesapSilOnayi(context, viewModel);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.logout,
+                color: EbruColors.onSurfaceVariant,
+              ),
+              title: Text(
+                'Çıkış yap',
+                style: EbruText.bodyLarge.copyWith(fontSize: 15),
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _cikisOnayi(context, viewModel);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Hesap silme onayı.
+  ///
+  /// Silinen hesap geri gelmiyor, o yüzden onay penceresi kullanıcıdan
+  /// şifresini (Google hesaplarında kullanıcı adını) yazmasını istiyor.
+  void _hesapSilOnayi(BuildContext context, EbruViewModel viewModel) {
+    showDialog(
+      context: context,
+      builder: (_) => _HesapSilPenceresi(viewModel: viewModel),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<EbruViewModel>();
@@ -123,46 +239,83 @@ class _SettingsViewState extends State<SettingsView> {
 
           const SectionLabel('Hesap'),
           const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: EbruColors.surfaceLow,
+          // Karta dokununca hesap menusu aciliyor; sitedeki profil
+          // simgesiyle ayni: kullanici adi, hesabi sil, cikis.
+          Material(
+            color: EbruColors.surfaceLow,
+            borderRadius: BorderRadius.circular(EbruShape.radiusXl),
+            child: InkWell(
+              onTap: () => _hesapMenusu(context, viewModel),
               borderRadius: BorderRadius.circular(EbruShape.radiusXl),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: const BoxDecoration(
-                    color: EbruColors.surfaceVariant,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.person_outline,
-                    size: 22,
-                    color: EbruColors.gold,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    viewModel.username.isEmpty
-                        ? 'Oturum açık'
-                        : viewModel.username,
-                    style: EbruText.bodyLarge.copyWith(fontSize: 16),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => _cikisOnayi(context, viewModel),
-                  child: Text(
-                    'Çıkış',
-                    style: EbruText.labelSmall.copyWith(
-                      color: EbruColors.error,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: const BoxDecoration(
+                        color: EbruColors.surfaceVariant,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.person_outline,
+                        size: 22,
+                        color: EbruColors.gold,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            viewModel.username.isEmpty
+                                ? 'Oturum açık'
+                                : viewModel.username,
+                            style: EbruText.bodyLarge.copyWith(fontSize: 16),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Hesap işlemleri için dokunun',
+                            style: EbruText.labelSmall.copyWith(
+                              color: EbruColors.outline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.expand_more,
+                      size: 22,
+                      color: EbruColors.outline,
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _hesapSilOnayi(context, viewModel),
+              icon: const Icon(
+                Icons.delete_forever_outlined,
+                size: 18,
+                color: EbruColors.error,
+              ),
+              label: Text(
+                'Hesabımı sil',
+                style: EbruText.labelSmall.copyWith(
+                  color: EbruColors.error,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
           const SizedBox(height: 32),
@@ -183,7 +336,7 @@ class _SettingsViewState extends State<SettingsView> {
           Text(
             'Ebru AI, geleneksel Türk ebru sanatını yapay zekâyla '
             'birleştirerek telefonun için özgün duvar kağıtları üretir. '
-            'Her eser tek seferlik ve sana özeldir.',
+            'Her eser tek seferlik ve size özeldir.',
             style: EbruText.bodyMedium,
           ),
 
@@ -319,6 +472,178 @@ class _SettingsViewState extends State<SettingsView> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Hesap silme onay penceresi.
+///
+/// Şifreyle açılmış hesap şifresini, Google ile açılmış hesap kullanıcı
+/// adını yazıyor: Google hesaplarının kullanılabilir bir şifresi yok.
+/// Hangisi olduğunu sunucu `/auth/me` ile bildiriyor.
+class _HesapSilPenceresi extends StatefulWidget {
+  final EbruViewModel viewModel;
+
+  const _HesapSilPenceresi({required this.viewModel});
+
+  @override
+  State<_HesapSilPenceresi> createState() => _HesapSilPenceresiState();
+}
+
+class _HesapSilPenceresiState extends State<_HesapSilPenceresi> {
+  final TextEditingController _onay = TextEditingController();
+  String? _hata;
+  bool _siliniyor = false;
+
+  bool get _sifreli => widget.viewModel.sifresiVar;
+
+  @override
+  void dispose() {
+    _onay.dispose();
+    super.dispose();
+  }
+
+  /// Son onay: "Hesabınız silinecektir, onaylıyor musunuz?"
+  ///
+  /// Kimlik alanı doldurulduktan SONRA soruluyor. Geri dönüşü olmayan
+  /// bir işlemde tek dokunuş yeterli olmamalı.
+  Future<bool> _sonOnay() async {
+    final ad = widget.viewModel.username;
+    final cevap = await showDialog<bool>(
+      context: context,
+      builder: (onayContext) => AlertDialog(
+        backgroundColor: EbruColors.surfaceHigh,
+        icon: const Icon(Icons.warning_amber_rounded,
+            color: EbruColors.error, size: 32),
+        title: Text('Emin misiniz?', style: EbruText.headlineSmall),
+        content: Text(
+          ad.isEmpty
+              ? 'Hesabınız ve size ait bütün veriler kalıcı olarak '
+                  'silinecektir. Bu işlem geri alınamaz. Onaylıyor musunuz?'
+              : '$ad hesabınız ve size ait bütün veriler kalıcı olarak '
+                  'silinecektir. Bu işlem geri alınamaz. Onaylıyor musunuz?',
+          style: EbruText.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(onayContext, false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(onayContext, true),
+            child: const Text(
+              'Evet, sil',
+              style: TextStyle(color: EbruColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    return cevap ?? false;
+  }
+
+  Future<void> _sil() async {
+    if (_onay.text.trim().isEmpty) {
+      setState(() {
+        _hata = _sifreli ? 'Şifrenizi yazın.' : 'Kullanıcı adınızı yazın.';
+      });
+      return;
+    }
+
+    if (!await _sonOnay()) return;
+    if (!mounted) return;
+
+    setState(() {
+      _hata = null;
+      _siliniyor = true;
+    });
+
+    try {
+      await widget.viewModel.hesabimiSil(
+        sifre: _sifreli ? _onay.text : null,
+        onay: _sifreli ? null : _onay.text.trim(),
+      );
+      if (!mounted) return;
+      // Oturum kapandı; AuthGate giriş ekranına dönüyor. Pencere de
+      // onunla birlikte kapanmalı, yoksa boş ekranın üstünde kalır.
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _hata = e.toString().replaceFirst('ApiException: ', '');
+        _siliniyor = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: EbruColors.surfaceHigh,
+      title: Text('Hesabımı sil', style: EbruText.headlineSmall),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hesabınız, adınız, e-posta adresiniz ve üretim sayaçlarınız '
+            'sunucudan kalıcı olarak silinir. Bu işlem geri alınamaz.\n\n'
+            'Telefonunuza kaydedilen eserler sizde kalır.',
+            style: EbruText.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _onay,
+            obscureText: _sifreli,
+            autocorrect: false,
+            enableSuggestions: false,
+            enabled: !_siliniyor,
+            style: const TextStyle(
+              fontFamily: EbruText.body,
+              fontSize: 14,
+              color: EbruColors.onSurface,
+            ),
+            decoration: InputDecoration(
+              labelText: _sifreli ? 'Şifreniz' : 'Kullanıcı adınız',
+              hintText: _sifreli ? null : widget.viewModel.username,
+              errorText: _hata,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _sifreli
+                ? 'Hesabın sahibi olduğunuzu doğrulamak için şifrenizi yazın.'
+                : 'Google ile açılmış hesapların şifresi yok. Onaylamak '
+                    'için kullanıcı adınızı yazın.',
+            style: EbruText.labelSmall.copyWith(
+              color: EbruColors.outline,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _siliniyor ? null : () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+        TextButton(
+          onPressed: _siliniyor ? null : _sil,
+          child: _siliniyor
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: EbruColors.error,
+                  ),
+                )
+              : const Text(
+                  'Kalıcı olarak sil',
+                  style: TextStyle(color: EbruColors.error),
+                ),
+        ),
+      ],
     );
   }
 }

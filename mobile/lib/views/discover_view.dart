@@ -62,7 +62,7 @@ class DiscoverView extends StatelessWidget {
           const SectionLabel('Paletler'),
           const SizedBox(height: 6),
           Text(
-            'Renk seçimi eserin havasını belirliyor.',
+            'Renk seçimi eserinizin havasını belirliyor.',
             style: EbruText.labelSmall.copyWith(color: EbruColors.outline),
           ),
           const SizedBox(height: 14),

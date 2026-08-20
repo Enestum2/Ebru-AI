@@ -30,13 +30,13 @@ class CreateView extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
               children: [
                 Text(
-                  'Bugün nasıl bir ebru istiyorsun?',
+                  'Bugün nasıl bir ebru istersiniz?',
                   textAlign: TextAlign.center,
                   style: EbruText.headlineMedium,
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Renk ve deseni seç, örnekler nasıl bir sonuç '
+                  'Renk ve deseni seçin, örnekler nasıl bir sonuç '
                   'çıkacağını gösteriyor.',
                   textAlign: TextAlign.center,
                   style: EbruText.bodyMedium,

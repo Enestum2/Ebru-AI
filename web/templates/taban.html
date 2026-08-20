@@ -172,6 +172,17 @@ tailwind.config = {
         <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="https://github.com/enestum2/Ebru-AI" target="_blank" rel="noopener">GitHub</a>
         <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="https://huggingface.co/enestum2/ebru-lora-sdxl" target="_blank" rel="noopener">Hugging Face</a>
       </div>
+      {# Yasal sayfalar her sayfadan erisilebilir olmali: Google Auth
+         Platform uygulamayi yayinlarken bu adresleri istiyor ve
+         ulasilabilir olmalarini bekliyor. #}
+      <div class="flex flex-col gap-sm">
+        <span class="text-on-surface font-label-md text-label-md uppercase tracking-wider">Yasal</span>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('gizlilik') }}">Gizlilik</a>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('kosullar') }}">Koşullar</a>
+        {# Google Play, uygulamayi kurmadan ulasilabilen bir hesap silme
+           adresi istiyor; bu yuzden altbilgide, her sayfada. #}
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('hesap_sil') }}">Hesabımı sil</a>
+      </div>
     </div>
   </div>
 
