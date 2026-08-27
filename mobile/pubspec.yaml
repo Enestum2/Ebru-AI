@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Sondaki sayı versionCode. Her dağıtılan sürümde artmalı, yoksa
 # telefonlar yeni APK'yı güncelleme olarak ayırt edemiyor.
-version: 1.2.3+6
+version: 1.2.4+7
 
 environment:
   sdk: ^3.12.1

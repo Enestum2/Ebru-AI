@@ -231,6 +231,22 @@ class EbruViewModel extends ChangeNotifier {
 
   // --- Seçimler ---
   String selectedPalette = 'osmanli';
+
+  /// Kullanıcının kendi seçtiği renkler. Boşsa hazır palet geçerli.
+  /// Doluyken hazır palet seçimi görselde hiç kullanılmıyor.
+  List<String> ozelRenkler = const [];
+
+  bool get ozelRenkAcik => ozelRenkler.isNotEmpty;
+
+  void setOzelRenkler(List<String> renkler) {
+    ozelRenkler = renkler;
+    notifyListeners();
+  }
+
+  void ozelRenkleriKapat() {
+    ozelRenkler = const [];
+    notifyListeners();
+  }
   String selectedStyle = 'battal';
   String promptTr = '';
 
@@ -410,8 +426,11 @@ class EbruViewModel extends ChangeNotifier {
       // Backend tek bir Türkçe prompt bekliyor; seçimler burada
       // birleştiriliyor. Sözlükteki anahtarlarla aynı kelimeler
       // kullanılıyor ki prompt motoru bunları yakalayabilsin.
+      // Özel renk seçiliyse palet ifadesi yazılmıyor: sunucu renkleri
+      // ayrı alandan alıyor ve hazır paleti yok sayıyor. Yazılsaydı
+      // kelime serbest metne düşüp gereksiz yere çevrilirdi.
       final parcalar = <String>[
-        '$etkinPalet renklerinde',
+        if (ozelRenkler.isEmpty) '$etkinPalet renklerinde',
         '$etkinDesen deseninde',
         if (etkinIstek.isNotEmpty) etkinIstek,
       ];
@@ -421,6 +440,7 @@ class EbruViewModel extends ChangeNotifier {
         aspectRatio: aspectRatio,
         seed: seed,
         intensity: intensity,
+        colors: ozelRenkler,
       );
 
       final sonuc = await _api.generateDesign(

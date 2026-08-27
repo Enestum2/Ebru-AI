@@ -68,6 +68,7 @@ import requests
 import kullanicilar
 import eposta as eposta_servisi
 import google_giris
+import renk_secici
 # =====================================
 # FLASK AYARLARI
 # =====================================
@@ -185,6 +186,14 @@ HEALTH_TIMEOUT = 6        # saniye: tek bir ping için üst sınır
 GENERATE_TIMEOUT = int(
     os.environ.get("EBRU_GENERATE_TIMEOUT", "300")
 )                         # saniye: görsel üretimi için üst sınır
+
+# Geçici Cloudflare tüneli uzun isteklerde ara sıra araya girip JSON
+# yerine kendi HTML hata sayfasını döndürüyor. Tünel ölmüş değil:
+# ölçümde, hatadan 5 saniye sonra aynı adres yine cevap veriyordu.
+# 27 Ağustos'ta günün 16 üretiminden 5'i tam bu yüzden düşmüştü.
+# Bu yüzden aynı adres birkaç kez deneniyor.
+URETIM_DENEME = int(os.environ.get("EBRU_URETIM_DENEME", "3"))
+URETIM_DENEME_BEKLEME = 2.0   # saniye; her denemede biraz artıyor
 
 # Bağlantıların yeniden kullanılması için oturumlar.
 # Üretim ve yoklama ayrı oturumlarda: uzun süren üretim isteği
@@ -881,6 +890,119 @@ OBJECT_PROMPTS = {
     "bulut":
     "a soft fluffy cloud with detailed volumetric texture",
 
+    # --- MEKAN / MANZARA ---
+    # "çölde giden deve" gibi sahneler kurulabilsin diye mekan
+    # kelimeleri de sozlukte. Motor bunlari nesneyle birlikte
+    # esliyor; ikisi ayri parca olarak prompt'a giriyor.
+    "çöl":
+    "a vast desert with rolling sand dunes and rippled wind patterns",
+
+    "vaha":
+    "a desert oasis with a still water pool and slender palm trees",
+
+    "göl":
+    "a calm lake with a smooth mirror-like surface and distant shore",
+
+    "nehir":
+    "a winding river with flowing water and curved banks",
+
+    "şelale":
+    "a tall waterfall with cascading water and rising mist",
+
+    "vadi":
+    "a deep valley between sloping hillsides",
+
+    "ova":
+    "a wide open plain with gently rolling grassland",
+
+    "bozkır":
+    "a dry steppe with sparse grass and open horizon",
+
+    "gökyüzü":
+    "an expansive sky with layered drifting clouds",
+
+    "gün batımı":
+    "a sunset horizon with a low glowing sun and banded sky",
+
+    # --- HAYVANLAR (ek) ---
+    "deve":
+    "a camel with a curved humped back, long neck and steady walking stance",
+
+    "ceylan":
+    "a gazelle with slender legs, curved horns and alert poised stance",
+
+    "kaplumbağa":
+    "a tortoise with a domed patterned shell and short sturdy legs",
+
+    "yılan":
+    "a serpent with a long coiled winding body and patterned scales",
+
+    "arı":
+    "a bee with rounded striped body and delicate transparent wings",
+
+    "koç":
+    "a ram with large spiral curved horns and thick woolly coat",
+
+    "balina":
+    "a whale with a massive smooth body and broad tail fluke",
+
+    "horoz":
+    "a rooster with an upright stance, tall comb and arched tail feathers",
+
+    "turna":
+    "a crane bird with long slender legs, extended neck and broad wings",
+
+    # --- OSMANLI / TÜRK MOTİFLERİ ---
+    "selvi":
+    "a tall slender cypress tree with a narrow pointed silhouette",
+
+    "çınar":
+    "a broad plane tree with a thick trunk and wide spreading canopy",
+
+    "rumi":
+    "a rumi motif, interlaced curved split-leaf arabesque scrollwork",
+
+    "hatayi":
+    "a hatayi motif, a stylized symmetrical blossom seen in cross section",
+
+    "çintemani":
+    "a chintamani motif, three dots arranged above two wavy tiger stripes",
+
+    "tuğra":
+    "an Ottoman tughra, a calligraphic monogram with tall vertical strokes "
+    "and sweeping curves",
+
+    "hilal":
+    "a crescent moon with clean tapering points",
+
+    "kandil":
+    "a hanging mosque lamp with a rounded glass body and suspension chains",
+
+    "ibrik":
+    "an ornate ewer with a curved spout, slender neck and rounded body",
+
+    "minare":
+    "a tall slender minaret with a balcony and a pointed conical cap",
+
+    "kubbe":
+    "a large rounded dome with smooth curved surface and a finial",
+
+    "çeşme":
+    "an ottoman street fountain with a carved arched niche and basin",
+
+    # --- MÜZİK ---
+    "ney":
+    "a ney reed flute, a long slender tube with finger holes",
+
+    "ud":
+    "an oud, a short-necked lute with a deep rounded pear-shaped body",
+
+    "saz":
+    "a saz, a long-necked lute with a small teardrop body and long fretted neck",
+
+    "kudüm":
+    "a pair of small hemispherical kettle drums",
+
     # --- BİNALAR ---
     "cami":
     "a traditional mosque with detailed minarets, domes and Islamic architectural patterns",
@@ -1112,6 +1234,27 @@ ACTION_PROMPTS = {
     "flying gracefully in motion",
 
 
+    # Yürüme/ilerleme fiilleri: bunlar yokken "çölde giden deve"
+    # ifadesindeki "giden" serbest metne düşüp "outgoing" diye
+    # çevriliyor ve prompt'a anlamsız bir kelime giriyordu.
+    "yürüyen":
+    "walking with a steady forward stride",
+
+    "giden":
+    "moving forward across the scene",
+
+    "ilerleyen":
+    "advancing steadily forward",
+
+    "süzülen":
+    "gliding smoothly through the air",
+
+    "tırmanan":
+    "climbing upward",
+
+    "dinlenen":
+    "resting calmly at ease",
+
     "koşan":
     "running dynamically",
 
@@ -1297,6 +1440,41 @@ _HARF_KOKU = {
 _desen_onbellegi = {}
 
 
+# Türkçe eklemeli bir dil: kullanıcı "orman" değil "ormanda", "kuş"
+# değil "kuşlar" yazıyor. Katı kelime sınırı bunları kaçırıyordu ve
+# motif prompt'a hiç girmiyordu.
+#
+# Ekler SAYILI: serbest bir harf dizisi ("çöl" + herhangi bir şey)
+# "kuş"u "kuşku"ya, "at"ı "ateş"e eşlerdi. Buradakiler yalnızca isim
+# çekim ekleri; sıfat-fiil ekleri (-en, -an) bilerek dışarıda, çünkü
+# "gül" ile "gülen" farklı şeyler.
+_TURKCE_EKLER = (
+    "(?:l[ae]r)?"                       # çoğul: -ler/-lar
+    "(?:"
+    "[dt][ae]n"                         # -den/-dan/-ten/-tan
+    "|[dt][ae]"                         # -de/-da/-te/-ta
+    "|n?[iıuü]n"                        # -in/-ın/-nin/-nın
+    "|y?[iıuü]"                         # -i/-ı/-yi/-yı
+    "|y?[ea]"                           # -e/-a/-ye/-ya
+    "|y?l[ae]"                          # -le/-la/-yle/-yla
+    ")?"
+)
+
+# Ünsüz yumuşaması: sonu p/ç/t/k ile biten kelimeler ünlüyle başlayan
+# ek alınca yumuşuyor (kelebek -> kelebeğe, balık -> balığı).
+#
+# Yalnızca 4 harften uzun köklerde uygulanıyor: "at" için yumuşak
+# biçim "ad" olurdu ve "adı güzel" yazan kullanıcıya at motifi
+# eklenirdi. Kısa köklerde kazanç riske değmiyor.
+_YUMUSAMA = {"p": "b", "ç": "c", "t": "d", "k": "ğ"}
+_YUMUSAMA_EN_KISA = 4
+
+# Yumuşamış biçimden sonra ek ZORUNLU ve ünlüyle başlamak durumunda:
+# yumuşama zaten ancak o zaman oluyor. Çoğul (-ler/-lar) ünsüzle
+# başladığı için buraya girmiyor, doğrusu da o ("kelebekler").
+_EK_UNLUYLE = "(?:n?[iıuü]n|y?[iıuü]|y?[ea])"
+
+
 def tolerant_pattern(key):
     """
     Bir anahtar kelime için Türkçe karakter toleranslı regex üretir.
@@ -1314,7 +1492,17 @@ def tolerant_pattern(key):
         else:
             parcalar.append(re.escape(harf))
 
-    desen = r'\b' + "".join(parcalar) + r'\b'
+    govde = "".join(parcalar)
+    desen = govde + _TURKCE_EKLER
+
+    # Sonu sert ünsüzle biten uzun kökler için yumuşamış biçim de
+    # kabul ediliyor.
+    yumusak_harf = _YUMUSAMA.get(key.lower()[-1]) if key else None
+    if yumusak_harf and len(key) >= _YUMUSAMA_EN_KISA:
+        yumusak_govde = "".join(parcalar[:-1]) + yumusak_harf
+        desen = "(?:%s|%s%s)" % (desen, yumusak_govde, _EK_UNLUYLE)
+
+    desen = r"\b" + desen + r"\b"
     _desen_onbellegi[key] = desen
     return desen
 
@@ -1344,19 +1532,53 @@ def residual_text(text, matched_keys):
     return kalan if len(kalan) >= 3 else ""
 
 
-def _en_ozgul_anahtarlar(anahtarlar):
+def _en_ozgul_anahtarlar(anahtarlar, metin=None):
     """
     Başka bir eşleşmenin içinde geçen anahtarları eler.
     Örn. "ay yıldız" eşleştiyse "ay" ayrıca eklenmez,
     "mavi-beyaz" eşleştiyse "mavi" ve "beyaz" tekrar eklenmez.
+
+    Metin verilirse anahtarların METİNDEKİ eşleşme aralıklarına
+    bakılıyor; verilmezse anahtar adlarının birbirini içermesine.
+
+    Aralık karşılaştırması şart oldu: ek toleransıyla birlikte
+    "bayrak" anahtarı "türk bayrağı" ifadesindeki "bayrağı"
+    kelimesini de eşliyor. Anahtar adları karşılaştırıldığında
+    ("bayrak" ile "türk bayrağı") biri diğerini içermediği için
+    ikisi de kalıyor ve prompt'a hem genel bayrak hem Türk bayrağı
+    tarifi giriyordu.
     """
-    return [
-        anahtar for anahtar in anahtarlar
-        if not any(
-            anahtar != digeri and anahtar in digeri
+    if metin is None:
+        return [
+            anahtar for anahtar in anahtarlar
+            if not any(
+                anahtar != digeri and anahtar in digeri
+                for digeri in anahtarlar
+            )
+        ]
+
+    araliklar = {}
+    for anahtar in anahtarlar:
+        eslesme = re.search(tolerant_pattern(anahtar), metin)
+        if eslesme:
+            araliklar[anahtar] = eslesme.span()
+
+    sonuc = []
+    for anahtar in anahtarlar:
+        if anahtar not in araliklar:
+            continue
+        bas, son = araliklar[anahtar]
+        kapsanan = any(
+            digeri != anahtar
+            and digeri in araliklar
+            and araliklar[digeri][0] <= bas
+            and son <= araliklar[digeri][1]
+            and (araliklar[digeri][1] - araliklar[digeri][0]) > (son - bas)
             for digeri in anahtarlar
         )
-    ]
+        if not kapsanan:
+            sonuc.append(anahtar)
+    return sonuc
 
 
 def _tekrarsiz(anahtarlar, sozluk):
@@ -1412,10 +1634,16 @@ def has_object(user_text):
     return bool(object_keys(user_text))
 
 
-def enrich_prompt(user_text):
+def enrich_prompt(user_text, ozel_renkler=None):
+    """Türkçe isteği İngilizce prompt'a çevirir.
 
+    ozel_renkler verilirse (kullanıcı kendi rengini seçtiyse) hazır
+    palet sözlüğü devreye girmiyor; renkler doğrudan tarife çevriliyor.
+    """
     text = user_text.lower()
     prompt_parts = []
+
+    ozel_palet = renk_secici.palet_tarifi(ozel_renkler) if ozel_renkler else None
 
     # Önce hangi anahtarların eşleştiğini bul, sonra en özgül olanları seç.
     eslesen = {
@@ -1432,7 +1660,7 @@ def enrich_prompt(user_text):
     }
     for kategori in eslesen:
         eslesen[kategori] = _tekrarsiz(
-            _en_ozgul_anahtarlar(eslesen[kategori]),
+            _en_ozgul_anahtarlar(eslesen[kategori], text),
             _sozlukler[kategori],
         )
 
@@ -1487,10 +1715,16 @@ def enrich_prompt(user_text):
             prompt_parts.append(f"({STYLE_PROMPTS[key]}:1.2)")
 
     for key in eslesen["renk"]:
+        if ozel_palet:
+            continue          # kullanıcının kendi rengi geçerli
         metin = COLOR_PROMPTS[key]
         if nesne_var:
             metin = paletten_beyazi_cikar(key, metin)
         prompt_parts.append(metin)
+
+    if ozel_palet:
+        print(f"🎨 Kullanıcı paleti: {ozel_palet}")
+        prompt_parts.append(ozel_palet)
 
     for key in eslesen["hareket"]:
         prompt_parts.append(ACTION_PROMPTS[key])
@@ -2753,8 +2987,16 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
         # ------------------------------
         # YENİ PROMPT ENGINE
         # ------------------------------
+        # Kullanıcı kendi rengini seçtiyse hazır palet yerine o geçerli.
+        # Liste kısa tutuluyor: ebruda iki üç renk yeterli, fazlası
+        # prompt'u seyreltiyor.
+        ozel_renkler = data.get("colors") or data.get("renkler") or []
+        if isinstance(ozel_renkler, str):
+            ozel_renkler = [ozel_renkler]
+        ozel_renkler = [str(r) for r in ozel_renkler][:3]
+
         translated_prompt = enrich_prompt(
-            user_prompt
+            user_prompt, ozel_renkler
         )
         # ------------------------------
         # LORA + MODEL PROMPT
@@ -2883,22 +3125,59 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                 if on_start:
                     on_start()
 
-                try:
-                    response = http.post(
-                        f"{active_url}/sdapi/v1/txt2img",
-                        json=payload,
-                        timeout=GENERATE_TIMEOUT
-                    )
-                    if "text/html" in response.headers.get(
-                        "Content-Type", ""
-                    ):
-                        raise Exception("Sunucu arayüz sayfası döndürdü")
-                except Exception as e:
-                    print(f"⚠️ {kaynak} başarısız:", e)
+                # Aynı adres birkaç kez deneniyor: tünelin tek bir
+                # tökezlemesi bütün üretimi düşürmemeli. GPU yuvası
+                # denemeler boyunca elde tutuluyor, araya başka iş
+                # girmesin.
+                response = None
+                son_hata = None
 
-                    # Uzak sunucu düştüyse yerel GPU'ya geç.
+                for deneme in range(1, URETIM_DENEME + 1):
+                    try:
+                        response = http.post(
+                            f"{active_url}/sdapi/v1/txt2img",
+                            json=payload,
+                            timeout=GENERATE_TIMEOUT
+                        )
+                        if "text/html" in response.headers.get(
+                            "Content-Type", ""
+                        ):
+                            raise Exception(
+                                "Sunucu arayüz sayfası döndürdü"
+                            )
+                        son_hata = None
+                        break
+                    except requests.exceptions.Timeout as e:
+                        # Zaman aşımında TEKRAR DENENMİYOR. İstek zaten
+                        # GENERATE_TIMEOUT kadar sürdü; üç kez denemek
+                        # işi on beş dakika askıda bırakırdı. Bu, tünel
+                        # tökezlemesi değil, GPU'nun yetişememesi.
+                        son_hata = e
+                        response = None
+                        print(f"⚠️ {kaynak} zaman aşımı, tekrar denenmiyor")
+                        break
+                    except Exception as e:
+                        son_hata = e
+                        response = None
+                        print(
+                            f"⚠️ {kaynak} denemesi "
+                            f"{deneme}/{URETIM_DENEME} başarısız: {e}"
+                        )
+                        if deneme < URETIM_DENEME:
+                            # Sıradaki denemeden önce iptal edilmiş
+                            # olabilir; boşa üretim yapılmasın.
+                            if job_id and _iptal_edildi_mi(job_id):
+                                print("🛑 Denemeler sırasında iptal edildi")
+                                return {
+                                    "status": "error",
+                                    "message": "Üretim iptal edildi.",
+                                }, 409
+                            time.sleep(URETIM_DENEME_BEKLEME * deneme)
+
+                if son_hata is not None:
+                    # Denemeler tükendi: adres gerçekten cevap vermiyor.
                     if kaynak != "colab":
-                        raise
+                        raise son_hata
 
                     with _state_lock:
                         _state["remote_ok"] = False
@@ -2915,6 +3194,16 @@ def _uretimi_calistir(data, kimlik, kullanici=None,
                         json=payload,
                         timeout=GENERATE_TIMEOUT
                     )
+                    # Yedek de arayüz sayfası dönebiliyor. Denetim
+                    # asıl yolda vardı, burada yoktu: HTML gövdesi
+                    # geçerli sayılıp .json() aşamasında anlamsız bir
+                    # çözümleme hatasına dönüşüyordu.
+                    if "text/html" in response.headers.get(
+                        "Content-Type", ""
+                    ):
+                        raise Exception(
+                            "Yedek sunucu arayüz sayfası döndürdü"
+                        )
                     kaynak = yedek_kaynak
         except KuyrukDolu:
             refund_quota(kimlik, kullanici)

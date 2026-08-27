@@ -21,6 +21,11 @@
 
   /* Palet kimlikleri sunucudaki COLOR_PROMPTS anahtarlarıyla ve
      uygulamadaki design_options.dart ile birebir aynı. */
+  /* "Kendi rengim" ilk acildiginda gelen renkler: ebruda en sik
+     kullanilan kizil-altin ikilisi. Bos kutularla acmak kullaniciyi
+     bos ekranda birakiyordu. */
+  const VARSAYILAN_OZEL_RENKLER = ['#C1272D', '#D4AF37'];
+
   const PALETLER = [
     { id: 'osmanli',       ad: 'Osmanlı',      aciklama: 'Kızıl, altın ve fildişi' },
     { id: 'zumrut',        ad: 'Zümrüt',       aciklama: 'Derin yeşil, altın damarlı' },
@@ -53,6 +58,9 @@
 
   const durum = {
     palet: 'osmanli',
+    // Kullanicinin kendi sectigi renkler. Bos dizi -> hazir palet
+    // gecerli. Doluysa sunucu hazir paleti yok sayiyor.
+    ozelRenkler: [],
     desen: 'battal',
     yogunluk: 50,
     oran: ORANLAR[0].oran,
@@ -111,20 +119,109 @@
       kap.appendChild(dugme);
     });
 
+    kap.appendChild(ozelPaletDugmesi());
+    ozelKutulariBagla();
     paletleriTazele();
+  }
+
+  /* Hazir paletlerin yanindaki "Kendi rengim" secenegi. */
+  function ozelPaletDugmesi() {
+    const dugme = document.createElement('button');
+    dugme.type = 'button';
+    dugme.id = 'ozelPaletDugmesi';
+    dugme.className = 'palet-dugme flex flex-col items-center gap-xs shrink-0 focus:outline-none';
+    dugme.title = 'Kendi renklerinizi secin';
+    dugme.innerHTML =
+      '<span class="palet-halka block w-16 h-16 rounded-full overflow-hidden ' +
+      'flex items-center justify-center" id="ozelPaletHalka">' +
+      '<span class="material-symbols-outlined text-[26px] text-on-surface">tune</span>' +
+      '</span>' +
+      '<span class="palet-ad font-label-sm text-label-sm text-on-surface-variant ' +
+      'whitespace-nowrap">Kendi rengim</span>';
+
+    dugme.addEventListener('click', () => {
+      const acik = durum.ozelRenkler.length > 0;
+      durum.ozelRenkler = acik ? [] : VARSAYILAN_OZEL_RENKLER.slice();
+      ozelPaneliTazele();
+      paletleriTazele();
+    });
+    return dugme;
   }
 
   function paletleriTazele() {
     const kap = $('paletListesi');
     if (!kap) return;
 
+    const ozel = durum.ozelRenkler.length > 0;
+
     Array.from(kap.children).forEach((dugme, i) => {
-      dugme.setAttribute('aria-pressed', String(PALETLER[i].id === durum.palet));
+      if (dugme.id === 'ozelPaletDugmesi') {
+        dugme.setAttribute('aria-pressed', String(ozel));
+        return;
+      }
+      // Ozel renk aciksa hazir paletlerin hicbiri secili gorunmemeli.
+      dugme.setAttribute(
+        'aria-pressed',
+        String(!ozel && PALETLER[i] && PALETLER[i].id === durum.palet)
+      );
     });
 
-    const secili = PALETLER.find((p) => p.id === durum.palet);
     const bilgi = $('paletAciklama');
-    if (bilgi && secili) bilgi.textContent = secili.aciklama;
+    if (!bilgi) return;
+    if (ozel) {
+      bilgi.textContent = 'Kendi renkleriniz kullanilacak';
+      return;
+    }
+    const secili = PALETLER.find((p) => p.id === durum.palet);
+    if (secili) bilgi.textContent = secili.aciklama;
+  }
+
+  /* Renk kutularini bir kez dinlemeye al. */
+  let _kutularBagli = false;
+
+  function ozelKutulariBagla() {
+    if (_kutularBagli) return;
+    const panel = $('ozelRenkPaneli');
+    if (!panel) return;
+    _kutularBagli = true;
+
+    const oku = () => {
+      const ucuncu = $('ozelRenk3Acik');
+      const renkler = [$('ozelRenk1').value, $('ozelRenk2').value];
+      if (ucuncu && ucuncu.checked) renkler.push($('ozelRenk3').value);
+      durum.ozelRenkler = renkler;
+      ozelPaneliTazele();
+      paletleriTazele();
+    };
+
+    panel.querySelectorAll('input').forEach((kutu) => {
+      kutu.addEventListener('input', oku);
+      kutu.addEventListener('change', oku);
+    });
+  }
+
+  /* Renk kutulari: acik/kapali durumu ve degerleri. */
+  function ozelPaneliTazele() {
+    const panel = $('ozelRenkPaneli');
+    if (!panel) return;
+
+    const acik = durum.ozelRenkler.length > 0;
+    // Gorunurluk sinifla yonetiliyor: "hidden" ozniteligi Tailwind'in
+    // display siniflarini ezemiyor.
+    panel.classList.toggle('hidden', !acik);
+    panel.classList.toggle('flex', acik);
+
+    const halka = $('ozelPaletHalka');
+    if (halka) {
+      halka.style.background = acik
+        ? 'linear-gradient(135deg, ' + durum.ozelRenkler.join(', ') + ')'
+        : '';
+    }
+    if (!acik) return;
+
+    panel.querySelectorAll('input[type=color]').forEach((kutu, i) => {
+      if (durum.ozelRenkler[i]) kutu.value = durum.ozelRenkler[i];
+    });
   }
 
   function desenleriCiz() {
@@ -365,10 +462,14 @@
   function promptKur() {
     // Uygulamadaki birleştirmenin aynısı (EbruViewModel.generateDesign).
     const ek = ($('ekIstek') ? $('ekIstek').value.trim() : '');
-    const parcalar = [
-      durum.palet + ' renklerinde',
-      durum.desen + ' deseninde',
-    ];
+    // Ozel renk secildiyse palet ifadesi yazilmiyor: sunucu renkleri
+    // ayri alandan aliyor ve hazir paleti yok sayiyor. Yazilsaydi
+    // kelime serbest metne dusup gereksiz yere cevrilirdi.
+    const parcalar = [];
+    if (durum.ozelRenkler.length === 0) {
+      parcalar.push(durum.palet + ' renklerinde');
+    }
+    parcalar.push(durum.desen + ' deseninde');
     if (ek) parcalar.push(ek);
     return parcalar.join(', ');
   }
@@ -381,6 +482,7 @@
         prompt: promptKur(),
         intensity: durum.yogunluk,
         aspect_ratio: durum.oran,
+        colors: durum.ozelRenkler,
       }),
     });
 

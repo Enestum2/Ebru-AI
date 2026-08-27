@@ -13,11 +13,16 @@ class GenerationRequestModel {
   /// dokusu her şeyin üstüne biniyor.
   final int? intensity;
 
+  /// Kullanıcının kendi seçtiği renkler (#rrggbb). Doluysa sunucu
+  /// hazır paleti yok sayıp bu renkleri kullanıyor.
+  final List<String> colors;
+
   GenerationRequestModel({
     required this.prompt,
     this.aspectRatio,
     this.seed,
     this.intensity,
+    this.colors = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -26,6 +31,7 @@ class GenerationRequestModel {
       if (aspectRatio != null) 'aspect_ratio': aspectRatio,
       if (seed != null && seed! >= 0) 'seed': seed,
       if (intensity != null) 'intensity': intensity,
+      if (colors.isNotEmpty) 'colors': colors,
     };
   }
 }

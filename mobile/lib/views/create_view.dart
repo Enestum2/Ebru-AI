@@ -202,11 +202,19 @@ class _PaletteRow extends StatelessWidget {
           height: 96,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: EbruPalette.all.length,
+            // Son sıra "Kendi rengim": hazır paletlerin yanında,
+            // sitedeki düzenin aynısı.
+            itemCount: EbruPalette.all.length + 1,
             separatorBuilder: (_, _) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
+              if (index == EbruPalette.all.length) {
+                return _OzelRenkDairesi(viewModel: viewModel);
+              }
               final palet = EbruPalette.all[index];
-              final secili = viewModel.selectedPalette == palet.id;
+              // Özel renk açıkken hazır paletlerin hiçbiri seçili
+              // görünmemeli; yoksa hangisinin geçerli olduğu belirsiz.
+              final secili = !viewModel.ozelRenkAcik &&
+                  viewModel.selectedPalette == palet.id;
 
               return GestureDetector(
                 onTap: () => viewModel.setPalette(palet.id),
@@ -251,7 +259,266 @@ class _PaletteRow extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          secilen.description,
+          viewModel.ozelRenkAcik
+              ? 'Kendi renkleriniz kullanılacak'
+              : secilen.description,
+          style: EbruText.labelSmall.copyWith(color: EbruColors.outline),
+        ),
+        if (viewModel.ozelRenkAcik) ...[
+          const SizedBox(height: 12),
+          _OzelRenkPaneli(viewModel: viewModel),
+        ],
+      ],
+    );
+  }
+}
+
+/// Palet satırının sonundaki "Kendi rengim" dairesi.
+class _OzelRenkDairesi extends StatelessWidget {
+  final EbruViewModel viewModel;
+
+  const _OzelRenkDairesi({required this.viewModel});
+
+  @override
+  Widget build(BuildContext context) {
+    final acik = viewModel.ozelRenkAcik;
+
+    return GestureDetector(
+      onTap: () => acik
+          ? viewModel.ozelRenkleriKapat()
+          : viewModel.setOzelRenkler(_OzelRenkPaneli.varsayilan),
+      child: Column(
+        children: [
+          Container(
+            width: 66,
+            height: 66,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: acik ? EbruColors.gold : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: EbruColors.surfaceVariant,
+                gradient: acik
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: viewModel.ozelRenkler
+                            .map(_OzelRenkPaneli.renkCoz)
+                            .toList(),
+                      )
+                    : null,
+              ),
+              child: acik
+                  ? null
+                  : const Icon(
+                      Icons.tune,
+                      size: 24,
+                      color: EbruColors.onSurfaceVariant,
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Kendi rengim',
+            style: EbruText.labelSmall.copyWith(
+              color: acik ? EbruColors.gold : EbruColors.onSurfaceVariant,
+              fontWeight: acik ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Özel renk paneli: iki (isteğe bağlı üç) renk kutusu.
+///
+/// Hazır bir renk seçici paketi eklenmedi. Küratörlü bir ızgara hem
+/// bağımlılık getirmiyor hem de dokunmatik ekranda tam serbest bir
+/// renk çarkından daha kullanışlı; ebruda zaten sınırlı bir palet
+/// geleneği var.
+class _OzelRenkPaneli extends StatelessWidget {
+  final EbruViewModel viewModel;
+
+  const _OzelRenkPaneli({required this.viewModel});
+
+  /// "Kendi rengim" ilk açıldığında gelen ikili: ebruda en sık
+  /// kullanılan kızıl-altın. Boş kutuyla açmak kullanıcıyı boş
+  /// ekranda bırakıyordu.
+  static const List<String> varsayilan = ['#C1272D', '#D4AF37'];
+
+  /// Izgaradaki renkler. Geleneksel ebru boyalarına yakın tonlar.
+  static const List<String> secenekler = [
+    '#C1272D', '#8E1B1B', '#E85D2A', '#D4AF37', '#F2C94C', '#FFFDD0',
+    '#1E8449', '#0E5A3C', '#0F7B8A', '#00838F', '#1B4F9C', '#0F2A5F',
+    '#5B2C87', '#7D3C98', '#B03A75', '#E38AAE', '#8B4513', '#5D4037',
+    '#F5F5DC', '#E0DCC8', '#9E9E9E', '#4A4A4A', '#1A1A1A', '#FFFFFF',
+  ];
+
+  /// '#rrggbb' -> Color. Bozuk değer gelirse gri döner; ekran
+  /// çökmemeli.
+  static Color renkCoz(String hex) {
+    final temiz = hex.replaceAll('#', '').trim();
+    if (temiz.length != 6) return EbruColors.surfaceVariant;
+    final deger = int.tryParse(temiz, radix: 16);
+    if (deger == null) return EbruColors.surfaceVariant;
+    return Color(0xFF000000 | deger);
+  }
+
+  void _renkSec(BuildContext context, int sira) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: EbruColors.surfaceHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(EbruShape.radiusXl),
+        ),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                sira == 0
+                    ? 'Ana renk'
+                    : (sira == 1 ? 'İkinci renk' : 'Üçüncü renk'),
+                style: EbruText.headlineSmall,
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: secenekler.map((hex) {
+                  final secili = sira < viewModel.ozelRenkler.length &&
+                      viewModel.ozelRenkler[sira].toLowerCase() ==
+                          hex.toLowerCase();
+                  return GestureDetector(
+                    onTap: () {
+                      final yeni = List<String>.from(viewModel.ozelRenkler);
+                      while (yeni.length <= sira) {
+                        yeni.add(varsayilan.first);
+                      }
+                      yeni[sira] = hex;
+                      viewModel.setOzelRenkler(yeni);
+                      Navigator.pop(sheetContext);
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: renkCoz(hex),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: secili
+                              ? EbruColors.gold
+                              : Colors.white24,
+                          width: secili ? 3 : 1,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final renkler = viewModel.ozelRenkler;
+    final ucuncuVar = renkler.length > 2;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: EbruColors.surfaceLow,
+        borderRadius: BorderRadius.circular(EbruShape.radiusXl),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _kutu(context, 0, 'Ana renk'),
+              const SizedBox(width: 12),
+              _kutu(context, 1, 'İkinci'),
+              if (ucuncuVar) ...[
+                const SizedBox(width: 12),
+                _kutu(context, 2, 'Üçüncü'),
+              ],
+              const Spacer(),
+              TextButton(
+                onPressed: () {
+                  final yeni = List<String>.from(renkler);
+                  if (ucuncuVar) {
+                    yeni.removeAt(2);
+                  } else {
+                    yeni.add('#F5F5DC');
+                  }
+                  viewModel.setOzelRenkler(yeni);
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  ucuncuVar ? 'Üçüncüyü kaldır' : 'Üçüncü renk ekle',
+                  style: EbruText.labelSmall.copyWith(
+                    color: EbruColors.gold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Seçtiğiniz renkler hazır paletin yerine geçer. '
+            'İki renk çoğu ebru için yeterlidir.',
+            style: EbruText.labelSmall.copyWith(
+              color: EbruColors.outline,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kutu(BuildContext context, int sira, String etiket) {
+    final hex = sira < viewModel.ozelRenkler.length
+        ? viewModel.ozelRenkler[sira]
+        : varsayilan.first;
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () => _renkSec(context, sira),
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: renkCoz(hex),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white24),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          etiket,
           style: EbruText.labelSmall.copyWith(color: EbruColors.outline),
         ),
       ],

@@ -91,6 +91,37 @@
         <!-- Uygulamada palet satiri yatay kayiyor; genis ekranda kaydirmak
              yerine sarmak daha iyi calisiyor, son kart kirpilmiyor. -->
         <div id="paletListesi" class="flex flex-wrap gap-md pb-sm px-xs"></div>
+
+        {# Kendi rengini secenler icin. Baslangicta gizli; "Kendi rengim"
+           dugmesi acip kapatiyor. Gorunurluk sinifla yonetiliyor. #}
+        <div id="ozelRenkPaneli"
+             class="hidden flex-wrap items-end gap-md mt-sm p-sm rounded-xl
+                    bg-surface-container-low border border-white/10">
+          <div class="flex flex-col gap-xs">
+            <label for="ozelRenk1" class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Ana renk</label>
+            <input type="color" id="ozelRenk1" value="#C1272D"
+                   class="w-16 h-10 rounded-lg bg-transparent border border-white/15 cursor-pointer">
+          </div>
+          <div class="flex flex-col gap-xs">
+            <label for="ozelRenk2" class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">İkinci renk</label>
+            <input type="color" id="ozelRenk2" value="#D4AF37"
+                   class="w-16 h-10 rounded-lg bg-transparent border border-white/15 cursor-pointer">
+          </div>
+          <div class="flex flex-col gap-xs">
+            <label for="ozelRenk3" class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Üçüncü (isteğe bağlı)</label>
+            <div class="flex items-center gap-xs">
+              <input type="color" id="ozelRenk3" value="#F5F5DC"
+                     class="w-16 h-10 rounded-lg bg-transparent border border-white/15 cursor-pointer">
+              <label class="flex items-center gap-xs font-label-sm text-label-sm text-on-surface-variant cursor-pointer">
+                <input type="checkbox" id="ozelRenk3Acik" class="accent-gold">
+                kullan
+              </label>
+            </div>
+          </div>
+          <p class="w-full font-label-sm text-label-sm text-outline">
+            Seçtiğiniz renkler hazır paletin yerine geçer. İki renk çoğu ebru için yeterlidir.
+          </p>
+        </div>
       </div>
 
       <!-- 2. Desen -->
