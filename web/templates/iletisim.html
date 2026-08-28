@@ -1,0 +1,74 @@
+{% extends "taban.html" %}
+{% set sayfa = 'iletisim' %}
+
+{% block baslik %}Ebru AI — İletişim{% endblock %}
+{% block aciklama %}Ebru AI ekibine ulaşın: soru, öneri ve iş birliği için iletişim bilgileri.{% endblock %}
+
+{% block icerik %}
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg pt-lg pb-md">
+  <div class="flex flex-col gap-sm max-w-3xl ac gorundu">
+    <span class="font-label-md text-label-md text-tertiary uppercase tracking-widest">— İletişim</span>
+    <h1 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">Bize ulaşın</h1>
+    <p class="font-body-lg text-body-lg text-on-surface-variant">
+      Sorularınız, önerileriniz ya da iş birliği talepleriniz için aşağıdaki
+      kanallardan bize yazabilirsiniz. Genellikle birkaç gün içinde
+      yanıtlıyoruz.
+    </p>
+  </div>
+</section>
+
+<section class="w-full max-w-container-max mx-auto px-md md:px-lg py-md">
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-md max-w-3xl">
+
+    <!-- E-posta -->
+    <a href="mailto:tumtumenes@gmail.com"
+       class="rounded-xl bg-surface-container-lowest border border-white/5 p-md
+              hover:border-gold/30 transition-colors flex items-start gap-sm ac ac-1">
+      <div class="w-12 h-12 rounded-full bg-gold/15 ring-1 ring-gold/40 flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-gold">mail</span>
+      </div>
+      <div class="flex flex-col gap-xs min-w-0">
+        <span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">E-posta</span>
+        <span class="font-body-md text-body-md text-on-surface break-all">tumtumenes@gmail.com</span>
+        <span class="font-label-sm text-label-sm text-outline">Soru, öneri ve talepler için</span>
+      </div>
+    </a>
+
+    <!-- GitHub -->
+    <a href="https://github.com/enestum2/Ebru-AI" target="_blank" rel="noopener"
+       class="rounded-xl bg-surface-container-lowest border border-white/5 p-md
+              hover:border-gold/30 transition-colors flex items-start gap-sm ac ac-2">
+      <div class="w-12 h-12 rounded-full bg-gold/15 ring-1 ring-gold/40 flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-gold">code</span>
+      </div>
+      <div class="flex flex-col gap-xs min-w-0">
+        <span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">GitHub</span>
+        <span class="font-body-md text-body-md text-on-surface break-all">github.com/enestum2/Ebru-AI</span>
+        <span class="font-label-sm text-label-sm text-outline">Kaynak kod ve hata bildirimi</span>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="max-w-3xl mt-lg rounded-xl bg-surface-container-lowest border border-white/5 p-md ac ac-3">
+    <div class="flex items-start gap-sm">
+      <span class="material-symbols-outlined text-tertiary shrink-0">info</span>
+      <div class="flex flex-col gap-xs">
+        <span class="font-label-md text-label-md text-on-surface">Ebru AI hakkında</span>
+        <p class="font-body-md text-body-md text-on-surface-variant">
+          Ebru AI, geleneksel Türk ebru sanatını yapay zekâ ile üreten bir
+          TÜBİTAK 2209-A projesidir. Projeyi geliştiren ekip için
+          <a href="{{ url_for('proje_ekibi') }}"
+             class="text-tertiary hover:text-tertiary-fixed">Proje Ekibi</a>
+          sayfasına, veri işleme koşulları için
+          <a href="{{ url_for('gizlilik') }}"
+             class="text-tertiary hover:text-tertiary-fixed">Gizlilik Politikası</a>
+          sayfasına bakabilirsiniz.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

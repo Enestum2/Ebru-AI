@@ -109,7 +109,8 @@ tailwind.config = {
       ('home',          'olustur', 'Oluştur'),
       ('ornekler',      '',        'Galeri'),
       ('nasil_calisir', '',        'Nasıl Çalışır'),
-      ('indir_sayfasi', '',        'Uygulama')
+      ('indir_sayfasi', '',        'Uygulama'),
+      ('iletisim',      '',        'İletişim')
     ] %}
 
     <nav id="anaMenu" class="hidden lg:flex items-center gap-md xl:gap-lg">
@@ -166,6 +167,7 @@ tailwind.config = {
         <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('ornekler') }}">Galeri</a>
         <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('indir_sayfasi') }}">Uygulama</a>
         <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('proje_ekibi') }}">Proje Ekibi</a>
+        <a class="text-on-surface-variant hover:text-tertiary transition-colors" href="{{ url_for('iletisim') }}">İletişim</a>
       </div>
       <div class="flex flex-col gap-sm">
         <span class="text-on-surface font-label-md text-label-md uppercase tracking-wider">Kaynak</span>
@@ -190,7 +192,7 @@ tailwind.config = {
               flex flex-col sm:flex-row gap-xs justify-between items-start sm:items-center
               text-on-surface-variant text-label-sm font-label-sm">
     <p>&copy; 2026 Ebru AI · TÜBİTAK Projesi</p>
-    <p>SDXL + ekibin eğittiği ebru LoRA modeli · 704×1024</p>
+    <p>SDXL · Ebru LoRA modelini <span class="text-on-surface">Oğulcan Eyup</span> eğitti · 704×1024</p>
   </div>
 </footer>
 

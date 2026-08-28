@@ -129,14 +129,33 @@
  * Sayfanın kendisi veri tutmuyor; her şey yetki isteyen uçlardan
  * geliyor (app.py: /stats, /admin/jobs, /admin/kullanicilar).
  */
-const TOKEN = {{ token | tojson }};
+// Yönetici anahtarı normal kullanımda gerekmez: yönetici hesabıyla
+// girildiğinde oturum Bearer'ı yetiyor. ?token= ile gelen değer bir kez
+// sessionStorage'a alınıp adresten siliniyor; sonraki isteklerde URL'ye
+// değil X-Admin-Token başlığına konuyor. Böylece anahtar ne API
+// adreslerine, ne tarayıcı geçmişine, ne de Referer başlığına düşüyor.
+const _SEED = {{ token | tojson }};
+let ADMIN_TOKEN = '';
+try { ADMIN_TOKEN = sessionStorage.getItem('ebru_admin_token') || ''; } catch (e) {}
+if (_SEED) {
+  ADMIN_TOKEN = _SEED;
+  try { sessionStorage.setItem('ebru_admin_token', _SEED); } catch (e) {}
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+}
+
+function yonetimBasliklari() {
+  const b = EbruHesap.basliklar();
+  if (ADMIN_TOKEN) b['X-Admin-Token'] = ADMIN_TOKEN;
+  return b;
+}
 
 const HUCRE = 'px-sm py-xs border-b border-white/5 whitespace-nowrap';
 const BASLIK_HUCRE = 'px-sm py-xs border-b border-white/10 font-label-sm text-label-sm ' +
                      'text-outline uppercase tracking-widest whitespace-nowrap';
 
 function uc(yol) {
-  return TOKEN ? yol + (yol.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN) : yol;
+  // Anahtar artık URL'ye eklenmiyor; X-Admin-Token başlığıyla gidiyor.
+  return yol;
 }
 
 function kacak(s) {
@@ -166,7 +185,7 @@ function panelGoster() {
 }
 
 async function iste(yol) {
-  const cevap = await fetch(uc(yol), { headers: EbruHesap.basliklar() });
+  const cevap = await fetch(uc(yol), { headers: yonetimBasliklari() });
   if (cevap.status === 403 || cevap.status === 401) {
     const hata = new Error('yetkisiz');
     hata.yetkisiz = true;
@@ -212,7 +231,7 @@ function isleriYaz(isler) {
       try {
         const cevap = await fetch(uc('/admin/jobs/' + encodeURIComponent(jobId) + '/cancel'), {
           method: 'POST',
-          headers: EbruHesap.basliklar(),
+          headers: yonetimBasliklari(),
         });
         const veri = await cevap.json().catch(() => ({}));
         if (!cevap.ok) throw new Error(veri.message || 'iptal edilemedi');
@@ -342,7 +361,7 @@ function tabloyuCiz() {
 /* Islem uclari. Hepsi ayni kaliba uyuyor: istegi at, sonucu bildir,
    listeyi tazele. */
 async function yonetimIstegi(yol, secenekler, basariMesaji) {
-  const basliklar = EbruHesap.basliklar();
+  const basliklar = yonetimBasliklari();
   basliklar['Content-Type'] = 'application/json';
   secenekler.headers = basliklar;
 
@@ -519,7 +538,7 @@ function otomatigiKur() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  if (!TOKEN && !EbruHesap.girisYapildiMi()) {
+  if (!ADMIN_TOKEN && !EbruHesap.girisYapildiMi()) {
     yetkisizGoster('Yönetici girişi gerekiyor.');
     return;
   }

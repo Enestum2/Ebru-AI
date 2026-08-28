@@ -544,7 +544,12 @@
     void gorsel.offsetWidth;
     gorsel.classList.add('eser-belir');
 
-    const paletAdi = (PALETLER.find((p) => p.id === durum.palet) || {}).ad || durum.palet;
+    // Özel renk seçiliyse hazır palet adı yanıltıcı olur: sunucu o
+    // paleti yok sayıp kullanıcının renklerini kullandı. durum.palet
+    // hâlâ son seçili hazır paleti tutuyor, o yüzden ayrıca bakılıyor.
+    const paletAdi = durum.ozelRenkler.length > 0
+      ? 'Kendi renkleriniz'
+      : (PALETLER.find((p) => p.id === durum.palet) || {}).ad || durum.palet;
     const desenAdi = (DESENLER.find((d) => d.id === durum.desen) || {}).ad || durum.desen;
 
     $('sonucPalet').textContent = paletAdi;

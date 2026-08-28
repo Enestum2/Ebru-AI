@@ -172,6 +172,13 @@ _TOKEN_AUTO_GENERATED = REGISTER_TOKEN is None
 if _TOKEN_AUTO_GENERATED:
     REGISTER_TOKEN = secrets.token_urlsafe(16)
 
+# Yönetici master anahtarı. REGISTER_TOKEN'dan AYRI tutuluyor: tünel
+# kaydı ile yönetici yetkisi farklı güven alanları; tek anahtarın
+# sızması ikisini birden açmamalı. Tanımlı değilse geriye dönük uyum
+# için REGISTER_TOKEN'a düşülüyor ve açılışta uyarı basılıyor.
+_ADMIN_TOKEN_ENV = (os.environ.get("EBRU_ADMIN_TOKEN") or "").strip()
+ADMIN_TOKEN = _ADMIN_TOKEN_ENV or REGISTER_TOKEN
+
 # Yalnızca bilinen tünel sağlayıcıları kabul edilir.
 #
 # Listeye projenin kendi alt alan adı da eklendi: GPU artık isimli
@@ -407,6 +414,65 @@ def client_ip():
         if ilk:
             return ilk
     return request.remote_addr or "bilinmiyor"
+
+
+# =====================================
+# KİMLİK UÇLARINDA HIZ SINIRI
+# =====================================
+# Giriş ve kayıt şifreyi scrypt ile doğruluyor: kasıtlı olarak pahalı.
+# Sunucu tek gunicorn işçisiyle küçük bir kutuda çalıştığı için sınırsız
+# istek hem şifre deneme-yanılmasına hem de işçiyi kilitleyen bir DoS'a
+# kapı açıyordu. IP başına pencere içinde sınırlı deneme.
+KIMLIK_PENCERE = 300          # saniye
+KIMLIK_MAX_DENEME = 10        # pencere içinde bu IP'ye izin verilen istek
+_kimlik_denemeleri = {}       # ip -> [zaman, ...]
+_kimlik_lock = threading.Lock()
+
+
+def _guvenli_ip():
+    """Hız sınırı için güvenilir istemci IP'si.
+
+    client_ip() X-Forwarded-For'un ilk değerini alıyor; onu istemci de
+    yazabilir, yani sınırı sahte IP'lerle atlatmak mümkün olurdu.
+    CF-Connecting-IP'yi Cloudflare kendisi koyuyor ve istemcininkini
+    eziyor, bu yüzden sınır anahtarı olarak güvenli.
+    """
+    cf = request.headers.get("CF-Connecting-IP", "").strip()
+    return cf or client_ip()
+
+
+def kimlik_hizi_asildi_mi():
+    """Bu IP kimlik uçlarında pencere içinde çok mu istek attı.
+
+    True dönerse istek reddedilmeli. Reddedilen istek de sayılıyor:
+    ısrarla deneyen bot, denemeyi kesene kadar kilitli kalıyor.
+    """
+    simdi = time.time()
+    ip = _guvenli_ip()
+    with _kimlik_lock:
+        gecmis = [
+            t for t in _kimlik_denemeleri.get(ip, [])
+            if simdi - t < KIMLIK_PENCERE
+        ]
+        gecmis.append(simdi)
+        _kimlik_denemeleri[ip] = gecmis
+
+        # Sözlük şişmesin: ara sıra tamamen eskimiş IP'leri at.
+        if len(_kimlik_denemeleri) > 2000:
+            for anahtar in list(_kimlik_denemeleri):
+                if all(simdi - t >= KIMLIK_PENCERE
+                       for t in _kimlik_denemeleri[anahtar]):
+                    del _kimlik_denemeleri[anahtar]
+
+        return len(gecmis) > KIMLIK_MAX_DENEME
+
+
+def _hiz_asildi_yaniti():
+    return jsonify({
+        "status": "error",
+        "message": "Çok fazla deneme yapıldı. Birkaç dakika sonra "
+                   "tekrar deneyin.",
+    }), 429
 
 
 def client_id():
@@ -2175,6 +2241,8 @@ def dogrula(token):
 
 @app.route("/auth/register", methods=["POST"])
 def auth_register():
+    if kimlik_hizi_asildi_mi():
+        return _hiz_asildi_yaniti()
     data = request.get_json(silent=True) or {}
     try:
         token, ad = kullanicilar.kayit_ol(
@@ -2214,6 +2282,8 @@ def auth_register():
 
 @app.route("/auth/login", methods=["POST"])
 def auth_login():
+    if kimlik_hizi_asildi_mi():
+        return _hiz_asildi_yaniti()
     data = request.get_json(silent=True) or {}
     try:
         token, ad = kullanicilar.giris_yap(
@@ -2506,11 +2576,12 @@ def _yonetici_yetkili():
     if kullanici and _yonetici_mi(kullanici["kullanici_adi"]):
         return True
 
-    verilen = (
-        request.args.get("token")
-        or request.headers.get("X-Admin-Token", "")
-    )
-    return secrets.compare_digest(str(verilen), REGISTER_TOKEN)
+    # Anahtar YALNIZCA başlıkta kabul ediliyor. URL ?token= yolu
+    # kaldırıldı: sorgu dizesi sunucu günlüğüne, tarayıcı geçmişine ve
+    # dış kaynak yüklendiğinde Referer başlığına düşüyordu. Ayrıca artık
+    # REGISTER_TOKEN değil, ondan ayrı olan ADMIN_TOKEN ile eşleşiyor.
+    verilen = request.headers.get("X-Admin-Token", "")
+    return bool(verilen) and secrets.compare_digest(str(verilen), ADMIN_TOKEN)
 
 
 @app.route("/stats", methods=["GET"])
@@ -2768,6 +2839,12 @@ def proje_ekibi():
     return render_template(
         "proje_ekibi.html"
     )
+
+
+@app.route("/iletisim")
+def iletisim():
+    """İletişim sayfası: e-posta ve GitHub bağlantıları."""
+    return render_template("iletisim.html")
 
 
 @app.route("/giris")
@@ -3674,6 +3751,12 @@ if _TOKEN_AUTO_GENERATED:
     print("        baslatildiginda degisecegi icin uretim makinesi")
     print("        kaydolamaz. Sunucuda mutlaka sabitle.")
     print(f"        Gecerli anahtar: {REGISTER_TOKEN}")
+
+if not _ADMIN_TOKEN_ENV:
+    print("[UYARI] EBRU_ADMIN_TOKEN verilmedi; yonetici yetkisi tunel")
+    print("        kayit anahtarina dusuyor. Ikisi ayri olmali:")
+    print("        birinin sizmasi digerini acmasin. ayar_yaz.bat ile")
+    print("        EBRU_ADMIN_TOKEN yaz.")
 
 if LOCAL_FALLBACK_URL is None and not LIGHTNING_ENABLED:
     print("[UYARI] Yerel GPU kapali ve Lightning hizlandirma da kapali.")
