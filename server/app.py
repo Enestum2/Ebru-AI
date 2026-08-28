@@ -1054,6 +1054,58 @@ OBJECT_PROMPTS = {
     "turna":
     "a crane bird with long slender legs, extended neck and broad wings",
 
+    # --- HAYVANLAR (ek 2) ---
+    "maymun":
+    "a monkey with a long curling tail, agile limbs and an expressive face",
+
+    "zürafa":
+    "a giraffe with a very long neck, patterned coat and slender legs",
+
+    "zebra":
+    "a zebra with bold black and white stripes and an upright mane",
+
+    "panda":
+    "a panda with a round body, black-and-white markings and rounded ears",
+
+    "penguen":
+    "a penguin with an upright body, flipper wings and a rounded belly",
+
+    "fok":
+    "a seal with a smooth streamlined body, flippers and a whiskered face",
+
+    "kanguru":
+    "a kangaroo with strong hind legs, upright posture and a long thick tail",
+
+    "sincap":
+    "a squirrel with a large bushy tail and a small alert body",
+
+    "kirpi":
+    "a hedgehog with a small rounded body covered in spines",
+
+    "keçi":
+    "a goat with curved horns, a short beard and a sturdy stance",
+
+    "inek":
+    "a cow with a broad body, curved horns and a patterned hide",
+
+    "timsah":
+    "a crocodile with a long armored body, ridged back and powerful jaws",
+
+    "kurbağa":
+    "a frog with a rounded body, long folded legs and bulging eyes",
+
+    "ahtapot":
+    "an octopus with a rounded head and eight curling tentacles",
+
+    "yengeç":
+    "a crab with a broad shell, jointed legs and raised claws",
+
+    "yarasa":
+    "a bat with outstretched membranous wings and a small body",
+
+    "örümcek":
+    "a spider with a rounded body and eight long jointed legs",
+
     # --- OSMANLI / TÜRK MOTİFLERİ ---
     "selvi":
     "a tall slender cypress tree with a narrow pointed silhouette",
