@@ -977,6 +977,17 @@ OBJECT_PROMPTS = {
     "a sweeping seascape, gentle rolling waves meeting a distant horizon "
     "under a wide open sky",
 
+    "deniz feneri":
+    "a tall lighthouse tower standing by the sea, with a bright beacon "
+    "light at the top and a striped body",
+
+    "park":
+    "a green park with detailed trees, winding paths, benches and open lawns",
+
+    "çocuk":
+    "a small child figure with a simple rounded silhouette, standing "
+    "playfully",
+
     "orman":
     "a dense forest with detailed trees, foliage and natural textures",
 
@@ -1335,6 +1346,9 @@ ACTION_PROMPTS = {
 
     "zıplayan":
     "jumping energetically in mid-air",
+
+    "oynayan":
+    "playing joyfully in a lively pose",
 
     "dövüşen":
     "fighting in a dynamic dramatic pose",
