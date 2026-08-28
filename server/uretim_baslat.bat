@@ -63,6 +63,25 @@ if exist "uretim_ayarlar.bat" (
     echo.
 )
 
+REM ---------- Isimli tunel ----------
+REM Gecici (trycloudflare) tunel her acilista yeni adres aliyordu ve
+REM koptugunda uretim dusuk kaliyordu. Isimli tunelde adres sabit:
+REM kopan baglanti ayni gpu.ebruai.com adresine geri geliyor.
+REM
+REM Ucu birden tanimli olmali; biri eksikse isci eski gecici tunel
+REM yoluna duser (yedek olarak bilerek birakildi).
+if not defined EBRU_TUNEL_ADI    set "EBRU_TUNEL_ADI=ebru-gpu"
+if not defined EBRU_TUNEL_CONFIG set "EBRU_TUNEL_CONFIG=%USERPROFILE%\.cloudflared\ebru-gpu.yml"
+if not defined EBRU_GPU_URL      set "EBRU_GPU_URL=https://gpu.ebruai.com"
+
+if not exist "%EBRU_TUNEL_CONFIG%" (
+    echo.
+    echo UYARI: Tunel yapilandirmasi yok: %EBRU_TUNEL_CONFIG%
+    echo Gecici tunele dusulecek.
+    echo.
+    set "EBRU_TUNEL_ADI="
+)
+
 REM ---------- Isci ----------
 if not exist "venv\Scripts\python.exe" (
     echo HATA: venv bulunamadi: %CD%\venv

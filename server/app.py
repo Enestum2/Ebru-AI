@@ -173,7 +173,16 @@ if _TOKEN_AUTO_GENERATED:
     REGISTER_TOKEN = secrets.token_urlsafe(16)
 
 # Yalnızca bilinen tünel sağlayıcıları kabul edilir.
+#
+# Listeye projenin kendi alt alan adı da eklendi: GPU artık isimli
+# Cloudflare tüneliyle `gpu.ebruai.com` üzerinden bağlanıyor. Geçici
+# adres her açılışta değiştiği için tünel koptuğunda üretim, yeni adres
+# kaydedilene kadar kapalı kalıyordu.
+#
+# Eski sağlayıcılar listede duruyor: isimli tünel kurulamazsa üretim
+# işçisi geçici tünele düşüyor ve o yol çalışmaya devam etmeli.
 ALLOWED_TUNNEL_HOSTS = (
+    "gpu.ebruai.com",
     "gradio.live",
     "trycloudflare.com",
     "ngrok-free.app",
@@ -200,6 +209,28 @@ URETIM_DENEME_BEKLEME = 2.0   # saniye; her denemede biraz artıyor
 # havuzu meşgul ettiğinde ilerleme sorguları boş dönüyordu.
 http = requests.Session()
 probe_http = requests.Session()
+
+# CLOUDFLARE ACCESS
+# -----------------
+# GPU artık isimli tünelle sabit bir adreste (gpu.ebruai.com). Sabit ve
+# tahmin edilebilir olduğu için A1111'in API'si korumasız bırakılamaz:
+# adresi bilen herkes başkasının kartında üretim yaptırabilir.
+#
+# Access açıldığında adres kimlik doğrulamasız açılmıyor. Sunucu bir
+# "servis anahtarı" ile geçiyor; anahtar iki başlıkta gönderiliyor.
+#
+# İkisi de tanımlı değilse hiçbir şey eklenmiyor ve her şey eskisi gibi
+# çalışıyor. Böylece Access panelden açılana kadar üretim durmuyor.
+ACCESS_ID = (os.environ.get("EBRU_ACCESS_ID") or "").strip()
+ACCESS_SECRET = (os.environ.get("EBRU_ACCESS_SECRET") or "").strip()
+
+if ACCESS_ID and ACCESS_SECRET:
+    for _oturum in (http, probe_http):
+        _oturum.headers.update({
+            "CF-Access-Client-Id": ACCESS_ID,
+            "CF-Access-Client-Secret": ACCESS_SECRET,
+        })
+    print("🔐 Cloudflare Access servis anahtarı etkin")
 
 # İlerleme bilgisi kısa süre önbelleklenir. Her sorgu A1111'e
 # gitmiyor; VRAM'i zorlanan sunucuda bu fark yaratıyor.

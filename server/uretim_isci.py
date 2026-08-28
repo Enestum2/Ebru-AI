@@ -68,6 +68,25 @@ ILK_SORGU_BEKLEMESI = 25
 # trycloudflare adresi cloudflared'in stderr ciktisinda gecer.
 ADRES_KALIBI = re.compile(r"https://[-a-z0-9]+\.trycloudflare\.com")
 
+# Isimli tunelde adres bastan belli, ciktidan okunmuyor. Bunun yerine
+# cloudflared'in "baglandim" satiri bekleniyor.
+KAYIT_KALIBI = re.compile(r"Registered tunnel connection")
+
+# ISIMLI TUNEL
+# ------------
+# Gecici tunel her acilista yeni adres aliyordu. Adres kullaniciya
+# gorunmedigi icin bu sorun degil sanilmisti, ama tunel KOPTUGUNDA
+# suren uretim oluyor ve site kaynagi "kapali" isaretliyor; yeni adres
+# kaydedilene kadar uretim dusuk kaliyor. Isimli tunelde adres sabit,
+# kopan baglanti ayni adrese geri geliyor.
+#
+# Ucu de tanimliysa isimli tunel kullaniliyor; degilse eski gecici
+# tunel yolu isliyor (yedek olarak bilerek birakildi).
+TUNEL_ADI = (os.environ.get("EBRU_TUNEL_ADI") or "").strip()
+TUNEL_CONFIG = (os.environ.get("EBRU_TUNEL_CONFIG") or "").strip()
+SABIT_ADRES = (os.environ.get("EBRU_GPU_URL") or "").strip().rstrip("/")
+ISIMLI_TUNEL = bool(TUNEL_ADI and TUNEL_CONFIG and SABIT_ADRES)
+
 # cloudflared, hicbir sey soylenmezse %USERPROFILE%\.cloudflared\config.yml
 # dosyasini KENDILIGINDEN okuyor. O dosya kalici ebruai.com tunelini
 # tarif ediyor ve icinde "son care: http_status:404" kurali var. Sonuc:
@@ -183,14 +202,29 @@ class Tunel(object):
 
     def baslat(self):
         self.adres = None
-        self.surec = subprocess.Popen(
-            [
+
+        if ISIMLI_TUNEL:
+            # --config MUTLAKA veriliyor: cloudflared hicbir sey
+            # soylenmezse ~/.cloudflared/config.yml dosyasini okuyor ve
+            # komut satirinda baska tunel adi verilse bile oradaki
+            # tuneli kullaniyor. DNS kaydi ilk kurulumda tam bu yuzden
+            # yanlis tunele baglanmisti.
+            komut = [
+                self.cf_yolu,
+                "--config", TUNEL_CONFIG,
+                "tunnel", "run", TUNEL_ADI,
+            ]
+        else:
+            komut = [
                 self.cf_yolu, "tunnel",
                 # Kalici tunelin config.yml'i sizmasin diye (yukaridaki
                 # BOS_CONFIG aciklamasina bak).
                 "--config", bos_config_hazirla(),
                 "--url", SD_URL,
-            ],
+            ]
+
+        self.surec = subprocess.Popen(
+            komut,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=temiz_ortam(),
@@ -224,7 +258,14 @@ class Tunel(object):
     def _ciktiyi_oku(self):
         try:
             for satir in self.surec.stdout:
-                if self.adres is None:
+                if self.adres is not None:
+                    continue
+                if ISIMLI_TUNEL:
+                    # Adres zaten belli; beklenen sey baglantinin
+                    # kurulmasi.
+                    if KAYIT_KALIBI.search(satir):
+                        self.adres = SABIT_ADRES
+                else:
                     bulunan = ADRES_KALIBI.search(satir)
                     if bulunan:
                         self.adres = bulunan.group(0)
@@ -372,8 +413,12 @@ def dongu(cf_yolu):
                 # sorunsuz cozuldu ve tunel HTTP 200 dondu. Bekleme
                 # yalnizca tunel ilk kuruldugunda, bir kez odeniyor;
                 # A1111'in acilisi zaten dakikalar suruyor.
-                if _durdur.wait(ILK_SORGU_BEKLEMESI):
-                    break
+                # Isimli tunelde bu bekleme gereksiz: gpu.ebruai.com
+                # kaydi kalici, cozumleyicide zaten var. Bekleme yalnizca
+                # HER ACILISTA YENI ad ureten gecici tunel icin gerekli.
+                if not ISIMLI_TUNEL:
+                    if _durdur.wait(ILK_SORGU_BEKLEMESI):
+                        break
 
                 # Tunel calisiyor mu diye bir de kendimiz bakalim.
                 #
