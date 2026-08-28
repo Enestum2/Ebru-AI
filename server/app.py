@@ -972,6 +972,11 @@ OBJECT_PROMPTS = {
     "deniz":
     "a vast sea with detailed rippling waves and horizon",
 
+    # Çok kelimeli anahtar; özgüllük süzgeci "deniz"in önüne geçiriyor.
+    "deniz manzarası":
+    "a sweeping seascape, gentle rolling waves meeting a distant horizon "
+    "under a wide open sky",
+
     "orman":
     "a dense forest with detailed trees, foliage and natural textures",
 
@@ -1548,8 +1553,8 @@ _desen_onbellegi = {}
 _TURKCE_EKLER = (
     "(?:l[ae]r)?"                       # çoğul: -ler/-lar
     "(?:"
-    "[dt][ae]n"                         # -den/-dan/-ten/-tan
-    "|[dt][ae]"                         # -de/-da/-te/-ta
+    "n?[dt][ae]n"                       # -den/-dan + tampon: -nden/-ndan
+    "|n?[dt][ae]"                       # -de/-da + tampon: -nde/-nda
     "|n?[iıuü]n"                        # -in/-ın/-nin/-nın
     "|y?[iıuü]"                         # -i/-ı/-yi/-yı
     "|y?[ea]"                           # -e/-a/-ye/-ya
